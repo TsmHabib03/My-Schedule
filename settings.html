@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#005BAC">
+  <title>Settings | QCU Schedule</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body data-page="settings">
+  <div class="app-shell">
+    <header id="app-header" class="page-header"></header>
+    <main class="page-container section-stack max-w-3xl">
+      <section class="portal-card">
+        <h1 class="page-title">Settings</h1>
+        <p class="mt-2 text-[color:var(--muted)]">Preferences are saved locally in your browser.</p>
+      </section>
+      <section class="grid gap-3">
+        <label class="portal-card flex items-center justify-between gap-4">
+          <span><span class="block card-title">Dark Mode</span><span class="caption">Light mode remains the default.</span></span>
+          <input id="theme-toggle" class="h-6 w-6 accent-[#005BAC]" type="checkbox">
+        </label>
+        <label class="portal-card flex items-center justify-between gap-4">
+          <span><span class="block card-title">Notifications</span><span class="caption">Use browser reminders for class alerts.</span></span>
+          <input id="notifications-toggle" class="h-6 w-6 accent-[#005BAC]" type="checkbox">
+        </label>
+        <div class="portal-card">
+          <p class="card-title">Offline Status</p>
+          <p class="caption mt-1">The service worker caches the static app after first visit on a web server.</p>
+        </div>
+        <button id="reset-data" class="action-button secondary w-full"><i data-lucide="rotate-ccw"></i> Reset Data</button>
+      </section>
+    </main>
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

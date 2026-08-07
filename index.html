@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#005BAC">
+  <title>QCU Schedule</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body data-page="home">
+  <div class="app-shell">
+    <header id="app-header" class="page-header"></header>
+    <main class="page-container section-stack">
+      <section class="portal-card">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 class="page-title">Today's Schedule</h1>
+            <p class="mt-2 text-[color:var(--muted)]">Your current class, next subject, room, and countdown update automatically.</p>
+          </div>
+          <a class="view-all" href="today.html">View full day</a>
+        </div>
+        <div class="mt-6 grid gap-3 md:grid-cols-3">
+          <div class="border-l-4 border-[color:var(--blue)] bg-[color:var(--blue-soft)] p-4">
+            <p class="caption">Current Class</p>
+            <p id="current-subject" class="card-title mt-1">Loading</p>
+          </div>
+          <div class="border-l-4 border-[color:var(--gold)] bg-[color:var(--gold-soft)] p-4">
+            <p class="caption">Next Class</p>
+            <p id="next-subject" class="card-title mt-1">Loading</p>
+          </div>
+          <div class="border-l-4 border-[color:var(--border)] bg-[color:var(--bg-soft)] p-4">
+            <p class="caption">Countdown</p>
+            <p id="hero-countdown" class="card-title mt-1 text-[color:var(--blue)]">Loading</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid gap-4 md:grid-cols-[1fr_280px]">
+        <div>
+          <div class="mb-3 flex items-end justify-between gap-4">
+            <h2 class="section-title">Today's Classes</h2>
+            <a class="view-all" href="today.html">View all</a>
+          </div>
+          <div id="today-list" class="grid gap-3 md:grid-cols-2"></div>
+        </div>
+        <aside class="portal-card">
+          <h2 class="section-title">Daily Progress</h2>
+          <p id="daily-progress-label" class="mt-2 text-sm font-bold text-[color:var(--muted)]">0% complete</p>
+          <div class="progress-track mt-4"><div id="daily-progress" class="progress-bar"></div></div>
+          <p id="upcoming-class" class="mt-5 text-sm font-semibold text-[color:var(--muted)]">Loading upcoming class</p>
+          <div class="mt-6 grid gap-3">
+            <a class="action-button" href="schedule.html"><i data-lucide="calendar-days"></i> Schedule</a>
+            <a class="action-button secondary" href="buildings.html"><i data-lucide="building-2"></i> Buildings</a>
+          </div>
+        </aside>
+      </section>
+
+      <section class="portal-card !p-0">
+        <div class="p-6 pb-2">
+          <h2 class="section-title">Weekly View</h2>
+        </div>
+        <div id="weekly-overview" class="weekday-tabs"></div>
+      </section>
+    </main>
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

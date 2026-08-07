@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#005BAC">
+  <title>Buildings | QCU Schedule</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body data-page="buildings">
+  <div class="app-shell">
+    <header id="app-header" class="page-header"></header>
+    <main class="page-container section-stack">
+      <section class="portal-card">
+        <h1 class="page-title">Campus Buildings</h1>
+        <p class="mt-2 text-[color:var(--muted)]">Building information is presented as a simple list for quick room lookup.</p>
+      </section>
+      <section id="building-grid" class="grid gap-4"></section>
+    </main>
+    <div id="building-modal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div id="building-modal-content" class="modal-card portal-card"></div>
+    </div>
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
+  </div>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
