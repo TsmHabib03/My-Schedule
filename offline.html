@@ -3,20 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Offline | QCU Schedule</title>
+  <meta name="theme-color" content="#005BAC">
+  <title>Offline | QCU Portal</title>
+  <link rel="icon" type="image/jpeg" href="assets/images/cropped-logo.jpg">
+  <link rel="apple-touch-icon" href="assets/images/cropped-logo.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="assets/css/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css?v=5">
 </head>
 <body>
-  <main class="grid min-h-[100dvh] place-items-center px-4">
-    <section class="portal-card max-w-md text-center">
-      <img class="mx-auto h-[84px] w-[84px] object-contain" src="assets/images/cropped-logo.jpg" alt="Quezon City University logo">
-      <h1 class="page-title mt-5">You are offline</h1>
-      <p class="mt-2 text-[color:var(--muted)]">Cached QCU Schedule pages will keep working after the first visit.</p>
-      <a class="action-button mt-5" href="index.html">Return Home</a>
+  <main style="display:grid;min-height:100dvh;place-items:center;padding:16px;">
+    <section class="portal-card" style="max-width:400px;width:100%;text-align:center;padding:28px 20px;">
+      <img style="margin:0 auto;height:80px;width:80px;object-fit:contain;" src="assets/images/cropped-logo.jpg" alt="Quezon City University logo">
+      <h1 class="page-title" style="margin-top:20px;">You are offline</h1>
+      <p class="caption" style="margin-top:8px;line-height:1.5;">Cached QCU Schedule pages will keep working after the first visit.</p>
+      <a class="action-button" style="margin-top:20px;" href="index.html">Return Home</a>
     </section>
   </main>
 </body>

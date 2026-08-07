@@ -4,72 +4,82 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#005BAC">
-  <title>QCU Schedule</title>
+  <meta name="description" content="QCU Student Portal — view today's schedule, current class, upcoming classes and daily progress for Quezon City University.">
+  <title>QCU Schedule — Home</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/jpeg" href="assets/images/cropped-logo.jpg">
+  <link rel="apple-touch-icon" href="assets/images/cropped-logo.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="assets/css/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css?v=11">
 </head>
 <body data-page="home">
   <div class="app-shell">
     <header id="app-header" class="page-header"></header>
-    <main class="page-container section-stack">
-      <section class="portal-card">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 class="page-title">Today's Schedule</h1>
-            <p class="mt-2 text-[color:var(--muted)]">Your current class, next subject, room, and countdown update automatically.</p>
-          </div>
-          <a class="view-all" href="today.html">View full day</a>
+
+    <main class="page-container home-layout">
+
+      <!-- 1. Hero -->
+      <section class="home-hero">
+        <div class="home-hero-main">
+          <p class="home-hero-eyebrow">
+            <span class="home-hero-rule"></span>
+            <span id="home-greeting">Good day</span>
+          </p>
+          <h1 class="home-hero-title">Student Overview</h1>
+          <p class="home-hero-sub">Live class status updates every second.</p>
+          <p class="home-hero-date" id="home-hero-date">—</p>
         </div>
-        <div class="mt-6 grid gap-3 md:grid-cols-3">
-          <div class="border-l-4 border-[color:var(--blue)] bg-[color:var(--blue-soft)] p-4">
-            <p class="caption">Current Class</p>
-            <p id="current-subject" class="card-title mt-1">Loading</p>
-          </div>
-          <div class="border-l-4 border-[color:var(--gold)] bg-[color:var(--gold-soft)] p-4">
-            <p class="caption">Next Class</p>
-            <p id="next-subject" class="card-title mt-1">Loading</p>
-          </div>
-          <div class="border-l-4 border-[color:var(--border)] bg-[color:var(--bg-soft)] p-4">
-            <p class="caption">Countdown</p>
-            <p id="hero-countdown" class="card-title mt-1 text-[color:var(--blue)]">Loading</p>
-          </div>
+        <div class="home-hero-seal" aria-hidden="true">
+          <img src="assets/images/cropped-logo.jpg" alt="">
         </div>
       </section>
 
-      <section class="grid gap-4 md:grid-cols-[1fr_280px]">
-        <div>
-          <div class="mb-3 flex items-end justify-between gap-4">
-            <h2 class="section-title">Today's Classes</h2>
-            <a class="view-all" href="today.html">View all</a>
-          </div>
-          <div id="today-list" class="grid gap-3 md:grid-cols-2"></div>
+      <!-- 2. Weekly Overview -->
+      <section class="home-week">
+        <div class="home-week-head">
+          <h2 class="home-kicker">Weekly overview</h2>
+          <a class="home-week-link" href="schedule.html">
+            Full schedule
+            <i data-lucide="arrow-right"></i>
+          </a>
         </div>
-        <aside class="portal-card">
-          <h2 class="section-title">Daily Progress</h2>
-          <p id="daily-progress-label" class="mt-2 text-sm font-bold text-[color:var(--muted)]">0% complete</p>
-          <div class="progress-track mt-4"><div id="daily-progress" class="progress-bar"></div></div>
-          <p id="upcoming-class" class="mt-5 text-sm font-semibold text-[color:var(--muted)]">Loading upcoming class</p>
-          <div class="mt-6 grid gap-3">
-            <a class="action-button" href="schedule.html"><i data-lucide="calendar-days"></i> Schedule</a>
-            <a class="action-button secondary" href="buildings.html"><i data-lucide="building-2"></i> Buildings</a>
-          </div>
-        </aside>
+        <div id="home-week-strip" class="home-week-strip"></div>
+        <p class="home-week-hint">Tap a day to preview its classes.</p>
       </section>
 
-      <section class="portal-card !p-0">
-        <div class="p-6 pb-2">
-          <h2 class="section-title">Weekly View</h2>
+      <!-- 3. Today's Schedule (bento) -->
+      <div class="home-today-head">
+        <h2 class="home-kicker">Today's schedule</h2>
+      </div>
+      <div id="today-grid" class="home-today-grid"></div>
+
+      <!-- 4. Class Tracker + Countdown -->
+      <section class="home-nownext">
+        <div class="home-nownext-head">
+          <h2 class="home-kicker">Class tracker</h2>
+          <span class="home-nownext-state" id="countdown-state-label">—</span>
         </div>
-        <div id="weekly-overview" class="weekday-tabs"></div>
+<div id="home-tracker" class="home-tracker">
+          <div id="tracker-now" class="home-tracker-cell home-tracker-cell--now"></div>
+          <div class="home-tracker-arrow"><i data-lucide="arrow-right"></i></div>
+          <div id="tracker-next" class="home-tracker-cell home-tracker-cell--next"></div>
+        </div>
+        <div id="countdown-slot" class="home-countdown"></div>
       </section>
+
     </main>
+
+    <!-- Day schedule modal -->
+    <div id="day-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Daily class schedule">
+      <div id="day-modal-content" class="modal-card"></div>
+    </div>
+
     <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
   </div>
+
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-  <script src="assets/js/app.js"></script>
+<script src="assets/js/app.js?v=11"></script>
 </body>
 </html>

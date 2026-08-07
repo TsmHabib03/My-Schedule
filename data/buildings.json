@@ -11,9 +11,9 @@
     "code": "IK",
     "name": "Bautista Building",
     "image": "QCU-BUILDING-1024x683-1.jpg",
-    "description": "Campus building at the San Bartolome campus serving general academic purposes.",
-    "rooms": [],
-    "floors": "—"
+    "description": "Laboratory building used for hands-on programming and computing classes.",
+    "rooms": ["IK603 F1"],
+    "floors": "6th Floor"
   },
   {
     "code": "SB",
@@ -22,14 +22,6 @@
     "description": "Campus hall used for NSTP and physical wellness classes at the open ground area.",
     "rooms": ["SB OG"],
     "floors": "Ground Floor"
-  },
-  {
-    "code": "HB",
-    "name": "Techboc Building (Helbert Bautista TechVoc)",
-    "image": "Techboc HB bautista.jpg",
-    "description": "Specialized technology and computing laboratory building for hands-on programming and computing classes.",
-    "rooms": ["IK603 F1"],
-    "floors": "6th Floor"
   }
 ]
 

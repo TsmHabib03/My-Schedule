@@ -1,1 +1,13 @@
-{}
+{
+  "name": "qcu-student-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QCU Student Portal — a static HTML/CSS/JS PWA for viewing schedules, current/next classes, and campus buildings.",
+  "scripts": {
+    "build": "echo 'Static site — no build required'",
+    "deploy": "wrangler pages deploy . --project-name qcu-student-portal"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}
