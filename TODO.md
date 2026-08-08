@@ -1,8 +1,15 @@
-# Full Schedule Mobile UI/UX Fix — TODO
+# Logo Replacement — QC-App-logo.png
 
-## Steps
+- [ ] 1. Update favicon + apple-touch-icon in index.html
+- [ ] 2. Update favicon + apple-touch-icon in schedule.html
+- [ ] 3. Update favicon + apple-touch-icon in today.html
+- [ ] 4. Update favicon + apple-touch-icon in buildings.html
+- [ ] 5. Update favicon + apple-touch-icon in settings.html
+- [ ] 6. Update favicon + apple-touch-icon in offline.html (+ inline image)
+- [ ] 7. Update manifest.json icons to QC-App-logo.png
+- [ ] 8. Update service-worker.js cache (add QC-App-logo.png, bump version)
+- [ ] 9. Update index.html hero/banner seal image
+- [ ] 10. Update app.js header brand-logo src
+- [ ] 11. Add rounded-curve box styling in styles.css for hero seal & brand logo
+- [ ] 12. Remove temporary check_dim.ps1
 
-- [x] 1. Update `schedule.html` — Restructure table header (remove Day, combine Day+Time, combine Building/Room/Floor into Location)
-- [x] 2. Update `assets/js/app.js` — Rewrite `renderSchedule()` with new column structure, day abbreviations, building short names, compact status chips, break rows
-- [x] 3. Update `assets/css/styles.css` — Mobile-first table styling: typography, spacing, sticky header, status chips, break rows, row highlighting
-- [x] 4. Verify changes render correctly

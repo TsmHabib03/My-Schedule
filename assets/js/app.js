@@ -215,7 +215,7 @@ function renderShell() {
     header.innerHTML = `
       <div class="header-inner">
         <a href="index.html" class="header-brand">
-          <img class="brand-logo" src="assets/images/cropped-logo.jpg" alt="QCU Logo">
+          <img class="brand-logo" src="assets/images/QC-App-logo.png" alt="QCU Logo">
           <div class="brand-text">
             <p id="greeting" class="brand-name">QCU Student Portal</p>
             <p class="brand-sub">BS Computer Science · San Bartolome</p>

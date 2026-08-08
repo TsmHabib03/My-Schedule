@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v12";
+const CACHE_NAME = "qcu-schedule-v13";
 const ASSETS = [
   "./",
   "index.html",
@@ -10,7 +10,7 @@ const ASSETS = [
   "manifest.json",
   "assets/css/styles.css",
   "assets/js/app.js",
-  "assets/images/cropped-logo.jpg",
+  "assets/images/QC-App-logo.png",
   "assets/images/Quezon_City_Government.png",
   "assets/images/QCU-BUILDING-1024x683-1.jpg",
   "assets/images/Belmonte Building 2.jpg",
