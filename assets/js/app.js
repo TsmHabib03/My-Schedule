@@ -480,7 +480,8 @@ function renderHome() {
   const nextLabel = next ? "Coming up next" : (todaysClasses.length ? "No more classes today" : "No classes today");
 
   setText("home-greeting", `${greeting}, Habib`);
-  setText("home-hero-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
+  setText("hero-class-count", `${todaysClasses.length}`);
+  setText("hero-today-date", now.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }));
 
   const weekEl = document.getElementById("home-week-strip");
   if (weekEl) setInnerHTML(weekEl, weekStripTemplate(now));
@@ -488,9 +489,25 @@ function renderHome() {
   const grid = document.getElementById("today-grid");
   if (grid) {
     const feature = current || next;
+    // Build today's timeline with break slots between classes
+    const timeline = dayWithBreaks(today);
+    let classIndex = 0;
+    let breakIndex = 0;
+    const tiles = timeline.map(entry => {
+      if (entry.kind === "class") {
+        const item = entry.item;
+        const tile = todayTileTemplate(item, { feature: item === feature, i: classIndex });
+        classIndex++;
+        return tile;
+      } else {
+        const tile = breakTileTemplate(entry.start, entry.end, entry.minutes, breakIndex);
+        breakIndex++;
+        return tile;
+      }
+    });
     setInnerHTML(grid, [
       todaySummaryTemplate(todaysClasses, now),
-      ...todaysClasses.map((x, i) => todayTileTemplate(x, { feature: x === feature, i }))
+      ...tiles
     ].join(""));
   }
 
@@ -503,15 +520,24 @@ const trackerRoot = document.getElementById("home-tracker");
   const nowEl = document.getElementById("tracker-now");
   const nextEl = document.getElementById("tracker-next");
 
-  // No classes at all today → collapse into a single full-width empty state.
+  // No classes at all today OR all classes finished → collapse into a single full-width empty state.
   if (!current && !next) {
     if (trackerRoot) {
       trackerRoot.classList.add("home-tracker--empty");
+      const allDone = todaysClasses.length > 0;
       setInnerHTML(trackerRoot, `
         <div class="home-tracker-empty-panel">
-          <span class="home-tracker-empty-icon"><i data-lucide="calendar-x-2"></i></span>
-          <p class="home-tracker-empty-title">No classes today</p>
-          <p class="home-tracker-empty-sub">Nothing scheduled — enjoy your free day.</p>
+          <div class="home-tracker-empty-icon-wrap">
+            <span class="home-tracker-empty-icon"><i data-lucide="${allDone ? "check-circle-2" : "coffee"}"></i></span>
+          </div>
+          <div class="home-tracker-empty-text">
+            <p class="home-tracker-empty-title">${allDone ? "No classes left" : "No classes today"}</p>
+            <p class="home-tracker-empty-sub">${allDone ? "All classes are done for the day — enjoy your free time." : "You're all caught up — enjoy your free day."}</p>
+          </div>
+          <a class="home-tracker-empty-link" href="schedule.html">
+            View full schedule
+            <i data-lucide="arrow-right"></i>
+          </a>
         </div>`);
     }
   } else {
@@ -601,47 +627,103 @@ function openDayModal(day) {
 }
 
 /* ── Schedule Page ───────────────────────────────────── */
+function dayShort(day) {
+  return day.slice(0, 3);
+}
+
+function buildingShort(item) {
+  const b = buildingByCode(item.code);
+  if (!b) return item.building;
+  const name = b.name;
+  if (name.includes("New Academic")) return "New Acad Bldg";
+  if (name.includes("Bautista"))     return "Bautista Bldg";
+  if (name.includes("Belmonte"))     return "Belmonte Hall";
+  return name;
+}
+
+function floorShort(floor) {
+  if (!floor) return "";
+  if (floor.includes("Ground")) return "GF";
+  const m = floor.match(/(\d+)/);
+  return m ? `${m[1]}F` : floor;
+}
+
 function renderSchedule() {
   const rows = document.getElementById("schedule-rows");
   if (!rows) return;
   const now   = new Date();
   const today = dayNames[now.getDay()];
 
-  rows.innerHTML = orderedSchedule(now).map(item => {
+  // Build rows with break/free periods between classes on the same day
+  const html = [];
+  let lastDay = null;
+  let lastEnd = null;
+
+  orderedSchedule(now).forEach(item => {
     const status  = getStatus(item, now);
     const isToday = item.day === today;
     const rowClass = [`${status}-row`, isToday ? "today-row" : "", item.noClasses ? "no-class-row" : ""]
       .filter(Boolean).join(" ");
 
-    if (item.noClasses) {
-      return `
-        <tr class="${rowClass}">
-          <td data-label="Day"     class="font-bold">${item.day}</td>
-          <td data-label="Time">No Classes</td>
-          <td data-label="Subject" class="font-bold">No Classes Scheduled</td>
-          <td data-label="Code">—</td>
-          <td data-label="Building">—</td>
-          <td data-label="Room">—</td>
-          <td data-label="Floor">—</td>
-          <td data-label="Units">—</td>
-          <td data-label="Status"><span class="status-pill status-off">No Classes</span></td>
-        </tr>`;
+    // Insert break row between consecutive classes on the same day with gap >= BREAK_MIN
+    if (!item.noClasses && lastDay === item.day && lastEnd !== null) {
+      const gap = parseMinutes(item.start) - lastEnd;
+      if (gap >= BREAK_MIN) {
+        html.push(`
+          <tr class="break-row">
+            <td data-label="Time" colspan="6" style="text-align:center;">
+              <span class="break-free-label">FREE</span>
+              ${formatTime(minutesToTime(lastEnd))} – ${formatTime(item.start)}
+              <span class="break-duration">· ${formatGap(gap)} break</span>
+            </td>
+          </tr>`);
+      }
     }
 
-    const bname = buildingLabel(item);
-    return `
-      <tr class="${rowClass}">
-        <td data-label="Day"      style="font-weight:700;">${item.day}</td>
-        <td data-label="Time"     class="time-cell">${formatTime(item.start)} – ${formatTime(item.end)}</td>
-        <td data-label="Subject"  class="subject-cell">${item.subject}</td>
-        <td data-label="Code">    <span class="code-cell">${item.course || "—"}</span></td>
-        <td data-label="Building" class="building-cell">${bname}</td>
-        <td data-label="Room"     class="room-cell">${item.room}</td>
-        <td data-label="Floor">${item.floor}</td>
-        <td data-label="Units">${item.units > 0 ? item.units : "Lab"}</td>
-        <td data-label="Status"><span class="status-pill ${statusClass(status)}">${statusLabel(status)}</span></td>
-      </tr>`;
-  }).join("");
+    if (item.noClasses) {
+      html.push(`
+        <tr class="${rowClass}">
+          <td data-label="Time"    class="time-cell">${dayShort(item.day)}</td>
+          <td data-label="Subject" class="subject-cell font-bold">No Classes Scheduled</td>
+          <td data-label="Code">—</td>
+          <td data-label="Location">—</td>
+          <td data-label="Units">—</td>
+          <td data-label="Status"><span class="status-dot status-dot-off" title="No Classes"></span></td>
+        </tr>`);
+    } else {
+      const bname = buildingShort(item);
+      const loc = `${bname} · ${floorShort(item.floor)} · ${item.room}`;
+      html.push(`
+        <tr class="${rowClass}">
+          <td data-label="Time" class="time-cell">
+            <span class="day-abbr">${dayShort(item.day)}</span>
+            <span class="time-range">${formatTime(item.start)} – ${formatTime(item.end)}</span>
+          </td>
+          <td data-label="Subject" class="subject-cell">${item.subject}</td>
+          <td data-label="Code"><span class="code-cell">${item.course || "—"}</span></td>
+          <td data-label="Location" class="location-cell">${loc}</td>
+          <td data-label="Units"><span class="units-chip">${item.units > 0 ? item.units : "Lab"}</span></td>
+          <td data-label="Status"><span class="status-dot status-dot-${status}" title="${statusLabel(status)}"></span></td>
+        </tr>`);
+      lastDay = item.day;
+      lastEnd = parseMinutes(item.end);
+    }
+  });
+
+  rows.innerHTML = html.join("");
+}
+
+function minutesToTime(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function formatTimeShort(v) {
+  if (!v) return "—";
+  const [h, m] = v.split(":").map(Number);
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")}`;
 }
 
 /* ── Today Page ──────────────────────────────────────── */

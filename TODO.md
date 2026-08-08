@@ -1,11 +1,8 @@
-# Class Tracker Fix — TODO
+# Full Schedule Mobile UI/UX Fix — TODO
 
-## Part A — Fix "No classes left" in Class tracker (home page)
+## Steps
 
-- [x] Explore repo (index.html, styles.css, app.js, service-worker.js)
-- [x] Confirm plan with user
-- [x] A1. Populate `#tracker-now` and `#tracker-next` cells in `renderHome()` (app.js)
-- [x] A2. Add missing CSS for `.home-tracker` layout (styles.css)
-- [x] A3. Bump service worker cache version (service-worker.js)
-- [x] A4. Bump cache-busting query strings in index.html (styles.css v=11, app.js v=11)
-- [x] A5. Verify in browser (hard refresh)
+- [x] 1. Update `schedule.html` — Restructure table header (remove Day, combine Day+Time, combine Building/Room/Floor into Location)
+- [x] 2. Update `assets/js/app.js` — Rewrite `renderSchedule()` with new column structure, day abbreviations, building short names, compact status chips, break rows
+- [x] 3. Update `assets/css/styles.css` — Mobile-first table styling: typography, spacing, sticky header, status chips, break rows, row highlighting
+- [x] 4. Verify changes render correctly
