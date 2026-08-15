@@ -1221,17 +1221,20 @@ function noteCardTemplate(n) {
 
   return `
     <article class="note-card" data-note-id="${n.id}">
-      <div class="note-card-header">
-        <h3 class="note-card-title">${n.title || "Untitled note"}</h3>
-        <div class="task-card-actions">
-          <button class="icon-btn" data-action="edit-note" data-id="${n.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
-          <button class="icon-btn icon-btn--danger" data-action="delete-note" data-id="${n.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+      <div class="note-card-stripe" style="background:${sc.bg || 'var(--blue)'};"></div>
+      <div class="note-card-inner">
+        <div class="note-card-header">
+          <h3 class="note-card-title">${n.title || "Untitled note"}</h3>
+          <div class="task-card-actions">
+            <button class="icon-btn" data-action="edit-note" data-id="${n.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
+            <button class="icon-btn icon-btn--danger" data-action="delete-note" data-id="${n.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+          </div>
         </div>
-      </div>
-      ${bodyPreview ? `<p class="note-card-body">${bodyPreview}</p>` : ""}
-      <div class="task-card-footer">
-        ${subject}
-        ${date}
+        ${bodyPreview ? `<p class="note-card-body">${bodyPreview}</p>` : ""}
+        <div class="note-card-footer">
+          ${subject}
+          ${date}
+        </div>
       </div>
     </article>`;
 }
