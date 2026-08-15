@@ -206,6 +206,8 @@ function renderShell() {
     ["home",      "index.html",     "layout-dashboard", "Home"],
     ["schedule",  "schedule.html",  "calendar-days",    "Schedule"],
     ["today",     "today.html",     "clock",            "Today"],
+    ["tasks",     "tasks.html",     "check-square",     "Tasks"],
+    ["notes",     "notes.html",     "sticky-note",      "Notes"],
     ["buildings", "buildings.html", "building-2",       "Buildings"],
     ["settings",  "settings.html",  "settings",         "Settings"]
   ];
@@ -215,7 +217,7 @@ function renderShell() {
     header.innerHTML = `
       <div class="header-inner">
         <a href="index.html" class="header-brand">
-          <img class="brand-logo" src="assets/images/QC-App-logo.png" alt="QCU Logo">
+           <img class="brand-logo" src="assets/images/QCU college of computer studies logo.jpg" alt="QCU Logo">
           <div class="brand-text">
             <p id="greeting" class="brand-name">QCU Student Portal</p>
             <p class="brand-sub">BS Computer Science · San Bartolome</p>
@@ -874,12 +876,471 @@ function updateClock() {
   setText("greeting",  `${greeting}, Habib`);
 }
 
+/* ── Subjects (full names + color map) ───────────────── */
+const SUBJECT_NAMES = {
+  "CC102":  "Fundamentals of Programming",
+  "CC101":  "Introduction to Computing",
+  "NSTP 1": "National Service Training Program 1",
+  "MATH 1": "Mathematics in the Modern World",
+  "MATH 2": "College Algebra",
+  "FIL 1":  "Komunikasyon sa Akademikong Filipino",
+  "PE 1":   "Physical Fitness and Wellness",
+  "RIZAL":  "Life and Works of Rizal",
+  "GEE 1":  "Gender and Society",
+  "GEE 2":  "People and the Earth's Ecosystems"
+};
+
+const SUBJECT_COLORS = {
+  "CC102":  { bg: "#EDE7F6", fg: "#5E35B1", border: "#D1C4E9" },
+  "CC101":  { bg: "#E3F2FD", fg: "#1565C0", border: "#BBDEFB" },
+  "NSTP 1": { bg: "#FFF3E0", fg: "#E65100", border: "#FFE0B2" },
+  "MATH 1": { bg: "#E8F5E9", fg: "#2E7D32", border: "#C8E6C9" },
+  "MATH 2": { bg: "#E8F5E9", fg: "#2E7D32", border: "#C8E6C9" },
+  "FIL 1":  { bg: "#FCE4EC", fg: "#C62828", border: "#F8BBD0" },
+  "PE 1":   { bg: "#E0F7FA", fg: "#00838F", border: "#B2EBF2" },
+  "RIZAL":  { bg: "#F3E5F5", fg: "#7B1FA2", border: "#E1BEE7" },
+  "GEE 1":  { bg: "#FFF8E1", fg: "#F57F17", border: "#FFECB3" },
+  "GEE 2":  { bg: "#E8F5E9", fg: "#1B5E20", border: "#C8E6C9" }
+};
+
+function subjectFullName(code) {
+  return SUBJECT_NAMES[code] || code;
+}
+
+function subjectDisplayName(code) {
+  const full = SUBJECT_NAMES[code];
+  return full ? `${full} (${code})` : code;
+}
+
+function subjectColor(code) {
+  return SUBJECT_COLORS[code] || { bg: "#EEF1F5", fg: "#5F6368", border: "#E5E7EB" };
+}
+
+function allSubjects() {
+  const seen = new Set();
+  QCU_DEFAULTS.schedule.forEach(x => {
+    if (!x.noClasses && x.course) seen.add(x.course);
+  });
+  return [...seen].sort();
+}
+
+/* ── Task Manager ───────────────────────────────────── */
+const TASKS_KEY = "qcu-tasks";
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveTasks(tasks) {
+  localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+}
+
+function newTaskId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function addTask(data) {
+  const tasks = loadTasks();
+  tasks.unshift({ id: newTaskId(), ...data, done: false, createdAt: Date.now() });
+  saveTasks(tasks);
+}
+
+function updateTask(id, data) {
+  const tasks = loadTasks();
+  const idx = tasks.findIndex(t => t.id === id);
+  if (idx !== -1) { Object.assign(tasks[idx], data); saveTasks(tasks); }
+}
+
+function deleteTask(id) {
+  saveTasks(loadTasks().filter(t => t.id !== id));
+}
+
+function toggleTask(id) {
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === id);
+  if (t) { t.done = !t.done; saveTasks(tasks); }
+}
+
+const PRIORITY_META = {
+  high:   { label: "High",   color: "#DC2626", bg: "#FEE2E2", border: "#FECACA", icon: "arrow-up" },
+  medium: { label: "Medium", color: "#D97706", bg: "#FEF3C7", border: "#FDE68A", icon: "minus" },
+  low:    { label: "Low",    color: "#059669", bg: "#D1FAE5", border: "#A7F3D0", icon: "arrow-down" }
+};
+
+function priorityBadge(priority) {
+  const p = PRIORITY_META[priority];
+  if (!p) return "";
+  return `<span class="priority-badge" style="background:${p.bg};color:${p.color};border-color:${p.border};">
+    <i data-lucide="${p.icon}"></i>${p.label}
+  </span>`;
+}
+
+function filteredTasks() {
+  const search = (document.getElementById("task-search")?.value || "").toLowerCase();
+  const status = document.getElementById("task-filter-status")?.value || "all";
+  const subject = document.getElementById("task-filter-subject")?.value || "all";
+  const sort = document.getElementById("task-sort")?.value || "newest";
+
+  let tasks = loadTasks();
+
+  if (search) {
+    tasks = tasks.filter(t =>
+      (t.title || "").toLowerCase().includes(search) ||
+      (t.description || "").toLowerCase().includes(search)
+    );
+  }
+  if (status === "pending") tasks = tasks.filter(t => !t.done);
+  if (status === "done") tasks = tasks.filter(t => t.done);
+  if (subject !== "all") tasks = tasks.filter(t => t.subject === subject);
+
+  if (sort === "newest") tasks.sort((a, b) => b.createdAt - a.createdAt);
+  if (sort === "oldest") tasks.sort((a, b) => a.createdAt - b.createdAt);
+  if (sort === "deadline") tasks.sort((a, b) => (a.deadline || "zzz").localeCompare(b.deadline || "zzz"));
+  if (sort === "priority") tasks.sort((a, b) => {
+    const order = { high: 0, medium: 1, low: 2 };
+    const aVal = a.priority != null ? (order[a.priority] ?? 3) : 3;
+    const bVal = b.priority != null ? (order[b.priority] ?? 3) : 3;
+    return aVal - bVal;
+  });
+  if (sort === "alpha") tasks.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  return tasks;
+}
+
+function taskCardTemplate(t) {
+  const doneClass = t.done ? " completed" : "";
+  const priorityClass = t.priority ? ` task-card--priority-${t.priority}` : "";
+  const sc = subjectColor(t.subject);
+  const deadline = t.deadline ? `<span class="task-meta"><i data-lucide="calendar"></i>${t.deadline}</span>` : "";
+  const subject = t.subject
+    ? `<span class="subject-chip" style="background:${sc.bg};color:${sc.fg};border-color:${sc.border};">${subjectDisplayName(t.subject)}</span>`
+    : "";
+  const priority = t.priority ? priorityBadge(t.priority) : "";
+
+  return `
+    <article class="task-card${doneClass}${priorityClass}" data-task-id="${t.id}">
+      <button class="task-check-btn${t.done ? " checked" : ""}" data-action="toggle" data-id="${t.id}" aria-label="Toggle done"></button>
+      <div class="task-card-content">
+        <div class="task-card-header">
+          <h3 class="task-card-title${t.done ? " done" : ""}">${t.title || "Untitled task"}</h3>
+          <div class="task-card-actions">
+            <button class="icon-btn" data-action="edit" data-id="${t.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
+            <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${t.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+          </div>
+        </div>
+        ${t.description ? `<p class="task-card-desc">${t.description}</p>` : ""}
+        <div class="task-card-footer">
+          ${priority}
+          ${subject}
+          ${deadline}
+        </div>
+      </div>
+    </article>`;
+}
+
+function renderTasks() {
+  const list = document.getElementById("task-list");
+  if (!list) return;
+
+  const subjectSelect = document.getElementById("task-filter-subject");
+  if (subjectSelect && subjectSelect.children.length <= 1) {
+    allSubjects().forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s; opt.textContent = `${subjectFullName(s)} (${s})`;
+      subjectSelect.appendChild(opt);
+    });
+  }
+
+  const tasks = filteredTasks();
+  const hasFilters = (document.getElementById("task-search")?.value || "") ||
+                     (document.getElementById("task-filter-status")?.value || "all") !== "all" ||
+                     (document.getElementById("task-filter-subject")?.value || "all") !== "all";
+  let html;
+  if (!tasks.length && hasFilters) {
+    html = `<div class="empty-state"><i data-lucide="search-x" class="empty-icon"></i><span class="empty-text">No matching tasks</span><span class="empty-sub">Try adjusting your search or filters.</span></div>`;
+  } else if (!tasks.length) {
+    html = `<div class="empty-state"><i data-lucide="clipboard-list" class="empty-icon"></i><span class="empty-text">No tasks yet</span><span class="empty-sub">Tap the + button to add your first task.</span></div>`;
+  } else {
+    html = tasks.map(taskCardTemplate).join("");
+  }
+  setInnerHTML(list, html);
+  iconify();
+}
+
+function openTaskModal(task) {
+  const modal = document.getElementById("task-modal");
+  const content = document.getElementById("task-modal-content");
+  if (!modal || !content) return;
+
+  const isEdit = !!task;
+  const subjects = allSubjects();
+  const subjectOptions = subjects.map(s =>
+    `<option value="${s}" ${task && task.subject === s ? "selected" : ""}>${subjectDisplayName(s)}</option>`
+  ).join("");
+  const curPriority = (task && task.priority) || "medium";
+  const priorityOptions = Object.entries(PRIORITY_META).map(([k, v]) =>
+    `<option value="${k}" ${k === curPriority ? "selected" : ""}>${v.label}</option>`
+  ).join("");
+
+  content.innerHTML = `
+    <div class="modal-drag-handle"></div>
+    <div class="modal-inner">
+      <div class="modal-head">
+        <div>
+          <span class="chip chip-blue" style="margin-bottom:8px;display:inline-flex;">${isEdit ? "Edit" : "New"} Task</span>
+          <h2 class="modal-title">${isEdit ? "Edit Task" : "Add Task"}</h2>
+        </div>
+        <button class="modal-close-btn" data-close-task-modal aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
+      <form id="task-form" class="task-form">
+        <label class="form-field">
+          <span class="form-label">Title *</span>
+          <input type="text" id="tf-title" required placeholder="e.g. Submit Problem Set 3" value="${isEdit ? (task.title || "").replace(/"/g, "&quot;") : ""}">
+        </label>
+        <label class="form-field">
+          <span class="form-label">Description</span>
+          <textarea id="tf-desc" rows="3" placeholder="Optional details…">${isEdit ? (task.description || "") : ""}</textarea>
+        </label>
+        <div class="form-row">
+          <label class="form-field form-field--half">
+            <span class="form-label">Subject</span>
+            <select id="tf-subject">
+              <option value="">None</option>
+              ${subjectOptions}
+            </select>
+          </label>
+          <label class="form-field form-field--half">
+            <span class="form-label">Priority</span>
+            <select id="tf-priority">${priorityOptions}</select>
+          </label>
+        </div>
+        <label class="form-field">
+          <span class="form-label">Deadline</span>
+          <input type="date" id="tf-deadline" value="${isEdit && task.deadline ? task.deadline : ""}">
+        </label>
+        <button type="submit" class="action-button">
+          <i data-lucide="${isEdit ? "save" : "plus"}"></i>
+          ${isEdit ? "Save Changes" : "Add Task"}
+        </button>
+      </form>
+    </div>`;
+
+  modal.classList.add("open");
+  document.body.classList.add("modal-open");
+  iconify();
+
+  document.getElementById("task-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const data = {
+      title: document.getElementById("tf-title").value.trim(),
+      description: document.getElementById("tf-desc").value.trim(),
+      subject: document.getElementById("tf-subject").value,
+      priority: document.getElementById("tf-priority").value,
+      deadline: document.getElementById("tf-deadline").value
+    };
+    if (!data.title) return;
+    if (isEdit) updateTask(task.id, data);
+    else addTask(data);
+    closeTaskModal();
+    renderTasks();
+  });
+}
+
+function closeTaskModal() {
+  const modal = document.getElementById("task-modal");
+  if (modal) modal.classList.remove("open");
+  document.body.classList.remove("modal-open");
+}
+
+/* ── Notes ──────────────────────────────────────────── */
+const NOTES_KEY = "qcu-notes";
+
+function loadNotes() {
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveNotes(notes) {
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+function newNoteId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function addNote(data) {
+  const notes = loadNotes();
+  notes.unshift({ id: newNoteId(), ...data, createdAt: Date.now() });
+  saveNotes(notes);
+}
+
+function updateNote(id, data) {
+  const notes = loadNotes();
+  const idx = notes.findIndex(n => n.id === id);
+  if (idx !== -1) { Object.assign(notes[idx], data); saveNotes(notes); }
+}
+
+function deleteNote(id) {
+  saveNotes(loadNotes().filter(n => n.id !== id));
+}
+
+function filteredNotes() {
+  const search = (document.getElementById("note-search")?.value || "").toLowerCase();
+  const subject = document.getElementById("note-filter-subject")?.value || "all";
+  const sort = document.getElementById("note-sort")?.value || "newest";
+
+  let notes = loadNotes();
+
+  if (search) {
+    notes = notes.filter(n =>
+      (n.title || "").toLowerCase().includes(search) ||
+      (n.body || "").toLowerCase().includes(search)
+    );
+  }
+  if (subject !== "all") notes = notes.filter(n => n.subject === subject);
+
+  if (sort === "newest") notes.sort((a, b) => b.createdAt - a.createdAt);
+  if (sort === "oldest") notes.sort((a, b) => a.createdAt - b.createdAt);
+  if (sort === "alpha") notes.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  return notes;
+}
+
+function noteCardTemplate(n) {
+  const sc = subjectColor(n.subject);
+  const subject = n.subject
+    ? `<span class="subject-chip" style="background:${sc.bg};color:${sc.fg};border-color:${sc.border};">${subjectDisplayName(n.subject)}</span>`
+    : "";
+  const date = n.createdAt ? `<span class="task-meta"><i data-lucide="clock"></i>${new Date(n.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}</span>` : "";
+  const bodyPreview = (n.body || "").length > 140 ? (n.body || "").slice(0, 140) + "…" : (n.body || "");
+
+  return `
+    <article class="note-card" data-note-id="${n.id}">
+      <div class="note-card-header">
+        <h3 class="note-card-title">${n.title || "Untitled note"}</h3>
+        <div class="task-card-actions">
+          <button class="icon-btn" data-action="edit-note" data-id="${n.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
+          <button class="icon-btn icon-btn--danger" data-action="delete-note" data-id="${n.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+        </div>
+      </div>
+      ${bodyPreview ? `<p class="note-card-body">${bodyPreview}</p>` : ""}
+      <div class="task-card-footer">
+        ${subject}
+        ${date}
+      </div>
+    </article>`;
+}
+
+function renderNotes() {
+  const list = document.getElementById("note-list");
+  if (!list) return;
+
+  const subjectSelect = document.getElementById("note-filter-subject");
+  if (subjectSelect && subjectSelect.children.length <= 1) {
+    allSubjects().forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s; opt.textContent = `${subjectFullName(s)} (${s})`;
+      subjectSelect.appendChild(opt);
+    });
+  }
+
+  const notes = filteredNotes();
+  const hasFilters = (document.getElementById("note-search")?.value || "") ||
+                     (document.getElementById("note-filter-subject")?.value || "all") !== "all";
+  let html;
+  if (!notes.length && hasFilters) {
+    html = `<div class="empty-state"><i data-lucide="search-x" class="empty-icon"></i><span class="empty-text">No matching notes</span><span class="empty-sub">Try adjusting your search or filters.</span></div>`;
+  } else if (!notes.length) {
+    html = `<div class="empty-state"><i data-lucide="notebook-pen" class="empty-icon"></i><span class="empty-text">No notes yet</span><span class="empty-sub">Tap the + button to jot down your first note.</span></div>`;
+  } else {
+    html = notes.map(noteCardTemplate).join("");
+  }
+  setInnerHTML(list, html);
+  iconify();
+}
+
+function openNoteModal(note) {
+  const modal = document.getElementById("note-modal");
+  const content = document.getElementById("note-modal-content");
+  if (!modal || !content) return;
+
+  const isEdit = !!note;
+  const subjects = allSubjects();
+  const subjectOptions = subjects.map(s =>
+    `<option value="${s}" ${note && note.subject === s ? "selected" : ""}>${subjectDisplayName(s)}</option>`
+  ).join("");
+
+  content.innerHTML = `
+    <div class="modal-drag-handle"></div>
+    <div class="modal-inner">
+      <div class="modal-head">
+        <div>
+          <span class="chip chip-blue" style="margin-bottom:8px;display:inline-flex;">${isEdit ? "Edit" : "New"} Note</span>
+          <h2 class="modal-title">${isEdit ? "Edit Note" : "Add Note"}</h2>
+        </div>
+        <button class="modal-close-btn" data-close-note-modal aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
+      <form id="note-form" class="task-form">
+        <label class="form-field">
+          <span class="form-label">Title *</span>
+          <input type="text" id="nf-title" required placeholder="e.g. Lecture 5 Notes" value="${isEdit ? (note.title || "").replace(/"/g, "&quot;") : ""}">
+        </label>
+        <label class="form-field">
+          <span class="form-label">Subject</span>
+          <select id="nf-subject">
+            <option value="">None</option>
+            ${subjectOptions}
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">Content</span>
+          <textarea id="nf-body" rows="8" placeholder="Write your note here…">${isEdit ? (note.body || "") : ""}</textarea>
+        </label>
+        <button type="submit" class="action-button">
+          <i data-lucide="${isEdit ? "save" : "plus"}"></i>
+          ${isEdit ? "Save Changes" : "Add Note"}
+        </button>
+      </form>
+    </div>`;
+
+  modal.classList.add("open");
+  document.body.classList.add("modal-open");
+  iconify();
+
+  document.getElementById("note-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const data = {
+      title: document.getElementById("nf-title").value.trim(),
+      subject: document.getElementById("nf-subject").value,
+      body: document.getElementById("nf-body").value.trim()
+    };
+    if (!data.title) return;
+    if (isEdit) updateNote(note.id, data);
+    else addNote(data);
+    closeNoteModal();
+    renderNotes();
+  });
+}
+
+function closeNoteModal() {
+  const modal = document.getElementById("note-modal");
+  if (modal) modal.classList.remove("open");
+  document.body.classList.remove("modal-open");
+}
+
 /* ── Tick ────────────────────────────────────────────── */
 function tick() {
   updateClock();
   if (page === "home")     renderHome();
   if (page === "schedule") renderSchedule();
   if (page === "today")    renderToday();
+  if (page === "tasks")    renderTasks();
+  if (page === "notes")    renderNotes();
 }
 
 /* ── Init ────────────────────────────────────────────── */
@@ -893,11 +1354,17 @@ async function init() {
   if (page === "buildings") renderBuildings();
   if (page === "settings")  renderSettings();
 
-  ["building-modal", "day-modal"].forEach(id => {
+  /* ── Modal close handlers ─────────────────────────── */
+  ["building-modal", "day-modal", "task-modal", "note-modal"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("click", e => {
-        if (e.target.id === id || e.target.closest("[data-close-modal]")) closeModal();
+        if (e.target.id === id || e.target.closest("[data-close-modal]") ||
+            e.target.closest("[data-close-task-modal]") || e.target.closest("[data-close-note-modal]")) {
+          closeModal();
+          closeTaskModal();
+          closeNoteModal();
+        }
       });
     }
   });
@@ -907,8 +1374,100 @@ async function init() {
     if (cell) openDayModal(cell.dataset.day);
   });
 
+  /* ── Task page event listeners ────────────────────── */
+  const taskList = document.getElementById("task-list");
+  if (taskList) {
+    taskList.addEventListener("click", e => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (action === "toggle") toggleTask(id);
+      if (action === "edit") {
+        const task = loadTasks().find(t => t.id === id);
+        if (task) openTaskModal(task);
+      }
+      if (action === "delete") { deleteTask(id); }
+      renderTasks();
+    });
+  }
+
+  if (!document.querySelector(`[data-page="tasks"] .fab`)) {
+    const tasksFab = document.createElement("button");
+    tasksFab.className = "fab";
+    tasksFab.innerHTML = '<i data-lucide="plus"></i>';
+    tasksFab.setAttribute("aria-label", "Add task");
+    tasksFab.addEventListener("click", () => openTaskModal(null));
+    document.querySelector(`[data-page="tasks"] .page-container`)?.appendChild(tasksFab);
+  }
+
+  document.getElementById("task-search")?.addEventListener("input", renderTasks);
+  document.getElementById("task-filter-status")?.addEventListener("change", renderTasks);
+  document.getElementById("task-filter-subject")?.addEventListener("change", renderTasks);
+  document.getElementById("task-sort")?.addEventListener("change", renderTasks);
+
+  /* ── Task search clear button ─────────────────────── */
+  const taskSearch = document.getElementById("task-search");
+  const taskClear = document.getElementById("task-search-clear");
+  if (taskSearch && taskClear) {
+    taskSearch.addEventListener("input", () => {
+      taskClear.classList.toggle("visible", taskSearch.value.length > 0);
+    });
+    taskClear.addEventListener("click", () => {
+      taskSearch.value = "";
+      taskClear.classList.remove("visible");
+      renderTasks();
+      taskSearch.focus();
+    });
+  }
+
+  /* ── Notes page event listeners ───────────────────── */
+  const noteList = document.getElementById("note-list");
+  if (noteList) {
+    noteList.addEventListener("click", e => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (action === "edit-note") {
+        const note = loadNotes().find(n => n.id === id);
+        if (note) openNoteModal(note);
+      }
+      if (action === "delete-note") { deleteNote(id); renderNotes(); }
+    });
+  }
+
+  if (!document.querySelector(`[data-page="notes"] .fab`)) {
+    const notesFab = document.createElement("button");
+    notesFab.className = "fab";
+    notesFab.innerHTML = '<i data-lucide="plus"></i>';
+    notesFab.setAttribute("aria-label", "Add note");
+    notesFab.addEventListener("click", () => openNoteModal(null));
+    document.querySelector(`[data-page="notes"] .page-container`)?.appendChild(notesFab);
+  }
+
+  document.getElementById("note-search")?.addEventListener("input", renderNotes);
+  document.getElementById("note-filter-subject")?.addEventListener("change", renderNotes);
+  document.getElementById("note-sort")?.addEventListener("change", renderNotes);
+
+  /* ── Note search clear button ─────────────────────── */
+  const noteSearch = document.getElementById("note-search");
+  const noteClear = document.getElementById("note-search-clear");
+  if (noteSearch && noteClear) {
+    noteSearch.addEventListener("input", () => {
+      noteClear.classList.toggle("visible", noteSearch.value.length > 0);
+    });
+    noteClear.addEventListener("click", () => {
+      noteSearch.value = "";
+      noteClear.classList.remove("visible");
+      renderNotes();
+      noteSearch.focus();
+    });
+  }
+
+  /* ── Global keyboard shortcuts ────────────────────── */
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") closeModal();
+    if (e.key === "Escape") { closeModal(); closeTaskModal(); closeNoteModal(); }
   });
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {

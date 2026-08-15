@@ -9,15 +9,15 @@
   "theme_color": "#005BAC",
   "icons": [
     {
-      "src": "assets/images/QC-App-logo.png",
+      "src": "assets/images/QCU college of computer studies logo.jpg",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     },
     {
-      "src": "assets/images/QC-App-logo.png",
+      "src": "assets/images/QCU college of computer studies logo.jpg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]
