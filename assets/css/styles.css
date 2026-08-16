@@ -1080,13 +1080,49 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
   /* Hero seal scales down on small screens - keep on right */
   .home-hero-seal { width: 96px; height: 96px; border-radius: 12px; flex-shrink: 0; }
   .home-hero-seal img { padding: 4px; }
+  .home-hero { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; }
+  .home-hero-main { min-width: 0; flex: 1 1 0; overflow: hidden; }
+  .home-hero-seal { margin-left: 16px; }
 
-  /* Tasks + Notes: single-column cards on mobile */
-  .task-card { flex-direction: column; gap: 10px; padding: 12px 14px; }
-  .task-card-header { flex-direction: column; gap: 6px; }
-  .task-card-actions { align-self: flex-end; }
-  .task-filters { flex-wrap: wrap; }
-  .task-filter-select { min-width: 0; flex: 1 1 45%; }
+  /* Tasks + Notes: Tablet layout */
+  .task-card {
+    display: grid;
+    grid-template-columns: 28px 1fr 56px;
+    grid-template-areas:
+      "check title actions"
+      "check desc actions"
+      "check meta meta";
+    gap: 10px 14px;
+    padding: 14px 16px;
+    align-items: start;
+  }
+  .task-check-btn { margin: 0; grid-area: check; align-self: center; }
+  .task-card-content { grid-area: title / content; display: flex; flex-direction: column; gap: 6px; }
+  .task-card-header { flex-direction: column; gap: 4px; }
+  .task-card-desc { margin: 0; }
+  .task-card-actions {
+    grid-area: actions; justify-self: end; align-self: start;
+    display: flex; flex-direction: column; gap: 6px;
+    opacity: 0.6; transition: opacity var(--transition);
+  }
+  .task-card:hover .task-card-actions { opacity: 1; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 6px;
+    background: var(--bg-soft); color: var(--muted); border: 1px solid var(--border);
+  }
+  .icon-btn:hover { background: var(--blue-soft); color: var(--blue); border-color: var(--blue-mid); }
+  .icon-btn--danger:hover { background: var(--red-soft); color: var(--red); border-color: var(--red-mid); }
+  .icon-btn i { width: 16px; height: 16px; stroke-width: 2.2; }
+  .task-card-footer {
+    grid-area: meta; display: flex; flex-wrap: wrap; gap: 6px;
+    padding-top: 8px; border-top: 1px solid var(--divider); margin-top: 4px;
+  }
+  .task-card-footer .task-meta {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    padding: 5px 10px; background: var(--bg-soft); border-radius: 4px; border: 1px solid var(--border);
+  }
+  .subject-chip { font-size: 10px; padding: 4px 10px; }
+  .priority-badge { font-size: 10px; padding: 4px 10px; }
 
   .note-card-inner { padding: 12px 12px 10px; }
   .note-card-header { flex-direction: column; gap: 6px; }
@@ -1094,28 +1130,73 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 /* ── Very small screens ─────────────────────────────── */
 @media (max-width: 480px) {
-  .home-hero { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; padding: 16px 14px; gap: 12px; }
-  .home-hero-main { min-width: 0; flex: 1 1 auto; }
-  .home-hero-seal { width: 88px; height: 88px; border-radius: 12px; flex-shrink: 0; transform: none; }
+  .home-hero { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; padding: 16px 14px; gap: 12px; }
+  .home-hero-main { min-width: 0; flex: 1 1 0; overflow: hidden; }
+  .home-hero-seal { width: 88px; height: 88px; border-radius: 12px; flex-shrink: 0; transform: none; margin-left: 12px; }
   .home-hero-stats { justify-content: flex-start; }
-  .home-hero-title { font-size: clamp(22px, 6vw, 28px); }
+  .home-hero-title { font-size: clamp(22px, 6vw, 28px); white-space: normal; overflow-wrap: anywhere; }
   .home-hero-sub { font-size: 12px; }
   .home-hero-stat strong { font-size: 14px; }
+  .home-hero-eyebrow { flex-wrap: wrap; }
 
-  .task-card { padding: 10px 12px; }
-  .task-card-title { font-size: 12px; }
-  .task-card-desc { font-size: 11px; }
-  .task-card-footer .task-meta { font-size: 10px; }
-  .task-card-footer { gap: 4px; margin-top: 6px; }
+  /* Task Card - Mobile: Consistent layout */
+  .task-card {
+    display: grid;
+    grid-template-columns: 28px 1fr 48px;
+    grid-template-areas:
+      "check title actions"
+      "check desc actions"
+      "check meta meta";
+    gap: 10px 12px;
+    padding: 14px 12px;
+    align-items: start;
+  }
+  .task-check-btn {
+    width: 24px; height: 24px;
+    margin: 0; border-radius: 4px; border-width: 2px;
+    grid-area: check;
+    align-self: center;
+  }
+  .task-card-content { grid-area: title / content; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .task-card-header { flex-direction: column; gap: 4px; }
+  .task-card-title { font-size: 13px; line-height: 1.35; word-break: break-word; }
+  .task-card-desc { font-size: 11px; line-height: 1.4; margin: 0; }
+  .task-card-actions {
+    grid-area: actions;
+    justify-self: end;
+    align-self: start;
+    display: flex; flex-direction: column; gap: 6px;
+    opacity: 0.6; transition: opacity var(--transition);
+  }
+  .task-card:hover .task-card-actions { opacity: 1; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 6px;
+    background: var(--bg-soft); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .icon-btn:hover { background: var(--blue-soft); color: var(--blue); border-color: var(--blue-mid); }
+  .icon-btn--danger:hover { background: var(--red-soft); color: var(--red); border-color: var(--red-mid); }
+  .icon-btn i { width: 16px; height: 16px; stroke-width: 2.2; }
+  .task-card-footer {
+    grid-area: meta;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding-top: 6px; border-top: 1px solid var(--divider);
+    margin-top: 2px;
+  }
+  .task-card-footer .task-meta {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    padding: 4px 8px; background: var(--bg-soft); border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .task-card-footer .task-meta i { width: 12px; height: 12px; stroke-width: 2; }
+  .subject-chip { font-size: 10px; padding: 4px 10px; }
+  .priority-badge { font-size: 10px; padding: 4px 10px; }
 
   .note-card-inner { padding: 10px 10px 8px; }
   .note-card-title { font-size: 12px; }
   .note-card-body { font-size: 11px; margin-top: 4px; -webkit-line-clamp: 2; }
   .note-card-footer { padding-top: 6px; margin-top: 6px; }
   .note-card-footer .task-meta { font-size: 10px; }
-
-  .subject-chip { font-size: 9px; padding: 2px 6px; }
-  .priority-badge { font-size: 8px; padding: 2px 6px; }
 
   .icon-btn { width: 26px; height: 26px; }
   .icon-btn i { width: 13px; height: 13px; }
@@ -1131,17 +1212,27 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 /* ── Tiny screens ───────────────────────────────────── */
 @media (max-width: 360px) {
-  .home-hero { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; padding: 14px 12px; gap: 10px; }
-  .home-hero-seal { width: 72px; height: 72px; border-radius: 10px; }
-  .home-hero-title { font-size: 20px; }
+  .home-hero { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; padding: 14px 12px; gap: 10px; }
+  .home-hero-main { min-width: 0; flex: 1 1 0; overflow: hidden; }
+  .home-hero-seal { width: 72px; height: 72px; border-radius: 10px; flex-shrink: 0; margin-left: 8px; }
+  .home-hero-title { font-size: 20px; white-space: normal; overflow-wrap: anywhere; }
   .home-hero-sub { font-size: 11px; }
   .home-hero-stat { font-size: 11px; gap: 4px; }
   .home-hero-stat strong { font-size: 13px; }
+  .home-hero-eyebrow { flex-wrap: wrap; }
 
-  .task-card { padding: 8px 10px; }
-  .task-check-btn { width: 20px; height: 20px; }
-  .task-card-title { font-size: 11px; }
+  .task-card {
+    grid-template-columns: 26px 1fr 44px;
+    gap: 8px 10px; padding: 12px 10px;
+  }
+  .task-check-btn { width: 22px; height: 22px; }
+  .task-card-title { font-size: 12px; }
   .task-card-desc { font-size: 10px; }
+  .icon-btn { width: 36px; height: 36px; }
+  .icon-btn i { width: 15px; height: 15px; }
+  .task-card-footer .task-meta { font-size: 10px; padding: 3px 7px; }
+  .subject-chip { font-size: 9px; padding: 3px 8px; }
+  .priority-badge { font-size: 9px; padding: 3px 8px; }
 
   .note-card-body { -webkit-line-clamp: 1; font-size: 10px; }
   .note-card-title { font-size: 11px; }
