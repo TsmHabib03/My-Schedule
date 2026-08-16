@@ -205,7 +205,7 @@ function renderShell() {
   const navItems = [
     ["home",      "index.html",     "layout-dashboard", "Home"],
     ["schedule",  "schedule.html",  "calendar-days",    "Schedule"],
-    ["today",     "today.html",     "clock",            "Today"],
+    
     ["tasks",     "tasks.html",     "check-square",     "Tasks"],
     ["notes",     "notes.html",     "sticky-note",      "Notes"],
     ["buildings", "buildings.html", "building-2",       "Buildings"],
