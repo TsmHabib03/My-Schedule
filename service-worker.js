@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v15";
+const CACHE_NAME = "qcu-schedule-v16";
 const ASSETS = [
   "./",
   "index.html",

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#005BAC">
+  <meta name="description" content="Live Campus ETA for Quezon City University — real-time route and arrival estimates to San Bartolome Main Campus.">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Live Campus ETA | QCU Portal</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/jpeg" href="assets/images/QCU college of computer studies logo.jpg">
+  <link rel="apple-touch-icon" href="assets/images/QCU college of computer studies logo.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
+
+  <!-- MapLibre GL JS -->
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="assets/css/styles.css?v=16">
+  <link rel="stylesheet" href="assets/css/eta.css">
+</head>
+<body data-page="campus-eta">
+  <div class="app-shell">
+    <header id="app-header" class="page-header"></header>
+
+    <main class="page-container section-stack">
+
+      <!-- Header Card matching Tasks page pattern -->
+      <section class="portal-card">
+        <h1 class="page-title">Live Campus ETA</h1>
+        <p class="caption" style="margin-top:4px;">Track your route to QCU San Bartolome Campus in real-time.</p>
+      </section>
+
+      <!-- Accuracy / Device Guidance Alert (Shown dynamically when GPS accuracy is low or estimated via ISP) -->
+      <section id="eta-accuracy-alert" class="portal-card eta-accuracy-alert" style="display:none;">
+        <div class="eta-alert-header">
+          <span class="status-pill status-off" id="eta-alert-pill">
+            <i data-lucide="alert-triangle"></i> Location Accuracy Notice
+          </span>
+        </div>
+        <div class="eta-alert-body" style="margin-top:8px;">
+          <p class="eta-alert-title" id="eta-alert-title">
+            Location accuracy is low (<span id="eta-alert-radius">±1.5 km</span>)
+          </p>
+          <p class="caption" id="eta-alert-desc" style="margin-top:4px; line-height:1.5;">
+            Laptops without dedicated GPS hardware estimate location via Wi-Fi networks or your ISP gateway (which may resolve to another district such as Valenzuela). Enable Windows Location Services and connect to Wi-Fi for a more accurate fix.
+          </p>
+        </div>
+      </section>
+
+      <!-- Main ETA Section: Map, Stats & Controls -->
+      <div class="eta-content section-stack" style="gap:16px;">
+        <!-- Map Container -->
+        <div class="eta-map-wrapper">
+          <div id="eta-map"></div>
+          <div class="eta-status-strip" id="eta-status-strip">
+            <span class="pulse-dot" id="eta-status-dot"></span>
+            <span id="eta-status-text">Acquiring device location…</span>
+          </div>
+          <div class="eta-accuracy-badge" id="eta-accuracy-badge" style="display: none;">
+            <span id="eta-accuracy-val">--</span>
+          </div>
+
+          <!-- Floating Class Panel — inside map wrapper -->
+          <div class="eta-class-panel" id="eta-class-banner" style="display:none;">
+            <div class="eta-class-panel-header">
+              <p class="eta-class-panel-label">Next Class</p>
+              <button class="eta-class-toggle" id="eta-class-toggle" type="button" aria-label="Collapse class panel" title="Collapse">
+                <i data-lucide="chevron-down"></i>
+              </button>
+            </div>
+            <div class="eta-class-panel-body" id="eta-class-body">
+              <p class="eta-class-panel-day" id="eta-class-day">--</p>
+              <p class="eta-class-panel-course" id="eta-class-course">--</p>
+              <p class="eta-class-panel-subject" id="eta-class-subject">--</p>
+              <div class="eta-class-panel-divider"></div>
+              <p class="eta-class-panel-schedule" id="eta-class-schedule">--</p>
+              <p class="eta-class-panel-location" id="eta-class-location">--</p>
+              <div class="eta-class-panel-divider"></div>
+              <p class="eta-class-panel-arrival" id="eta-class-arrival">--</p>
+              <div class="eta-class-panel-divider"></div>
+              <div class="eta-class-panel-traffic" id="eta-class-traffic"></div>
+            </div>
+            <div class="eta-class-panel-status" id="eta-class-status-box">
+              <span class="eta-class-dot" id="eta-class-dot"></span>
+              <span class="eta-class-verdict" id="eta-class-verdict">--</span>
+              <span class="eta-class-margin" id="eta-class-margin">--</span>
+            </div>
+          </div>
+
+          <!-- No-class floating banner -->
+          <div class="eta-noclass-panel" id="eta-noclass-banner" style="display:none;">
+            <i data-lucide="calendar-off" style="width:16px;height:16px;color:var(--muted);flex-shrink:0;"></i>
+            <span id="eta-noclass-text">No upcoming classes.</span>
+          </div>
+        </div>
+
+        <!-- Stats Panel -->
+        <div class="eta-stats-panel">
+          <div class="eta-stat-box">
+            <p class="eta-stat-label">Normal ETA</p>
+            <p class="eta-stat-value" id="eta-val-static">--</p>
+          </div>
+          <div class="eta-stat-box">
+            <p class="eta-stat-label">Current ETA</p>
+            <p class="eta-stat-value" id="eta-val-time">--</p>
+          </div>
+          <div class="eta-stat-box">
+            <p class="eta-stat-label">Distance</p>
+            <p class="eta-stat-value" id="eta-val-dist">--</p>
+          </div>
+          <div class="eta-stat-box">
+            <p class="eta-stat-label">Traffic</p>
+            <p class="eta-stat-value" id="eta-val-status" style="font-size: 13px;">--</p>
+          </div>
+        </div>
+
+        <!-- Actions Toolbar -->
+        <div class="eta-actions">
+          <button class="btn btn-primary" id="btn-eta-locate" type="button" aria-label="Get fresh location and recenter">
+            <i data-lucide="locate"></i> Locate Me
+          </button>
+          <button class="btn btn-secondary" id="btn-eta-toggle" type="button" aria-label="Pause or resume tracking" style="display:none;">
+            <i data-lucide="pause"></i> Stop Tracking
+          </button>
+        </div>
+
+      </div>
+
+    </main>
+
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
+  </div>
+
+  <!-- MapLibre JS -->
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- App & ETA Scripts -->
+  <script>
+    // ETA Configuration - TomTom API key (restrict to this domain in TomTom Developer Portal)
+    window.ETA_CONFIG = {
+      tomtomApiKey: '' // Set via build process or environment variable
+    };
+  </script>
+  <script src="assets/js/app.js?v=16"></script>
+  <script src="assets/js/eta.js"></script>
+  <script>
+    init();
+    initETA();
+  </script>
+</body>
+</html>

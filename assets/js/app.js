@@ -204,7 +204,7 @@ function orderedSchedule(now = new Date()) {
 function renderShell() {
   const navItems = [
     ["home",      "index.html",     "layout-dashboard", "Home"],
-    ["schedule",  "schedule.html",  "calendar-days",    "Schedule"],
+    ["campus-eta", "campus-eta.html", "navigation",      "Campus ETA"],
     
     ["tasks",     "tasks.html",     "check-square",     "Tasks"],
     ["notes",     "notes.html",     "sticky-note",      "Notes"],
@@ -1344,6 +1344,7 @@ function tick() {
   if (page === "today")    renderToday();
   if (page === "tasks")    renderTasks();
   if (page === "notes")    renderNotes();
+  // campus-eta page uses its own loop in eta.js
 }
 
 /* ── Init ────────────────────────────────────────────── */
