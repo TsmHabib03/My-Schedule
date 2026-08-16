@@ -1077,8 +1077,8 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
   .home-tracker-empty-panel { flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; }
   .home-tracker-empty-link { width: 100%; justify-content: center; }
 
-  /* Hero seal scales down on small screens */
-  .home-hero-seal { width: 96px; height: 96px; border-radius: 12px; }
+  /* Hero seal scales down on small screens - keep on right */
+  .home-hero-seal { width: 96px; height: 96px; border-radius: 12px; flex-shrink: 0; }
   .home-hero-seal img { padding: 4px; }
 
   /* Tasks + Notes: single-column cards on mobile */
@@ -1094,9 +1094,13 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 /* ── Very small screens ─────────────────────────────── */
 @media (max-width: 480px) {
-  .home-hero { flex-direction: column; align-items: center; text-align: center; padding: 18px 16px; gap: 14px; }
-  .home-hero-seal { width: 110px; height: 110px; transform: none; }
-  .home-hero-stats { justify-content: center; }
+  .home-hero { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; padding: 16px 14px; gap: 12px; }
+  .home-hero-main { min-width: 0; flex: 1 1 auto; }
+  .home-hero-seal { width: 88px; height: 88px; border-radius: 12px; flex-shrink: 0; transform: none; }
+  .home-hero-stats { justify-content: flex-start; }
+  .home-hero-title { font-size: clamp(22px, 6vw, 28px); }
+  .home-hero-sub { font-size: 12px; }
+  .home-hero-stat strong { font-size: 14px; }
 
   .task-card { padding: 10px 12px; }
   .task-card-title { font-size: 12px; }
@@ -1127,9 +1131,12 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 /* ── Tiny screens ───────────────────────────────────── */
 @media (max-width: 360px) {
-  .home-hero-seal { width: 80px; height: 80px; }
+  .home-hero { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; padding: 14px 12px; gap: 10px; }
+  .home-hero-seal { width: 72px; height: 72px; border-radius: 10px; }
   .home-hero-title { font-size: 20px; }
   .home-hero-sub { font-size: 11px; }
+  .home-hero-stat { font-size: 11px; gap: 4px; }
+  .home-hero-stat strong { font-size: 13px; }
 
   .task-card { padding: 8px 10px; }
   .task-check-btn { width: 20px; height: 20px; }
