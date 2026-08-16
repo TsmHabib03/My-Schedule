@@ -1,5 +1,5 @@
-const CACHE_NAME = "qcu-schedule-v17";
-const ASSETS = [
+const CACHE_NAME = "qcu-schedule-v19";
+const STATIC_ASSETS = [
   "./",
   "index.html",
   "campus-eta.html",
@@ -21,12 +21,20 @@ const ASSETS = [
   "assets/images/Belmonte Building 2.jpg",
   "assets/images/New Academic building(1).jpg",
   "assets/images/Techboc HB bautista.jpg",
-  "data/schedule.json",
   "data/buildings.json"
 ];
 
+// Data files that should NOT be cached (always fetch fresh)
+const NO_CACHE_PATHS = [
+  "data/schedule.json"
+];
+
+function isNoCachePath(url) {
+  return NO_CACHE_PATHS.some(path => url.includes(path));
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 });
 
@@ -39,11 +47,30 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = event.request.url;
+
+  // For schedule data: always fetch from network, never cache
+  if (isNoCachePath(url)) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (!response.ok) throw new Error("Network response not ok");
+          return response;
+        })
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match("offline.html")))
+    );
+    return;
+  }
+
+  // For static assets: network first, then cache
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
       .catch(() => {
