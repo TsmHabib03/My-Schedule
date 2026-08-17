@@ -43,6 +43,12 @@
   --radius:      8px;
   --radius-lg:   12px;
   --transition:  150ms ease;
+  /* Functional status colors — Home status widget (sharp/enterprise UI).
+     Scoped by usage to the widget; the app-wide QCU palette above is untouched. */
+  --fn-red:      #DC2626; /* Suspended */
+  --fn-amber:    #D97706; /* Partially affected */
+  --fn-green:    #16A34A; /* Normal operations */
+  --fn-blue:     #0284C7; /* Weather / Flood advisory */
 }
 
 /* === RESET === */
@@ -1295,11 +1301,11 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 /* =============================================================
    HOME — "Today in Quezon City" status (weather + suspension)
-   Bento layout: mobile-first single column that fans into a
-   two-card grid on wider viewports. Soft rounded cards, subtle
-   borders + shadow, high-contrast type, restrained status color.
+   Sharp/enterprise bento: mobile-first single column that fans into
+   a two-card grid on wider viewports. Square-ish edges, hairline 1px
+   borders, flat surfaces, high-contrast type, functional status color.
    ============================================================= */
-.home-status-card { padding: 0; overflow: hidden; }
+.home-status-card { padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: none; }
 
 .status-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
@@ -1311,13 +1317,92 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
   color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
+/* Full-width alert banner above the grid — only when classes are suspended /
+   partially affected. Bold badge + one-line message; wraps cleanly ≤320px. */
+.status-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 16px; border-bottom: 1px solid var(--divider);
+  border-left: 3px solid var(--fn-red); background: rgba(220, 38, 38, 0.06);
+}
+.status-banner.is-partial { border-left-color: var(--fn-amber); background: rgba(217, 119, 6, 0.07); }
+.status-banner i, .status-banner svg { width: 18px; height: 18px; stroke-width: 2.2; flex-shrink: 0; color: var(--fn-red); }
+.status-banner.is-partial i, .status-banner.is-partial svg { color: var(--fn-amber); }
+.status-banner-body { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 9px; min-width: 0; }
+.status-banner-badge {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 2px 9px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  color: #fff; background: var(--fn-red); border-radius: 2px;
+}
+.status-banner.is-partial .status-banner-badge { background: var(--fn-amber); color: #fff; }
+/* Normal operations — calm green, no alarm. */
+.status-banner.is-normal { border-left-color: var(--fn-green); background: rgba(22, 163, 74, 0.06); }
+.status-banner.is-normal i, .status-banner.is-normal svg { color: var(--fn-green); }
+.status-banner.is-normal .status-banner-badge { background: var(--fn-green); }
+/* Scheduled (pending future suspension) — informational blue. */
+.status-banner.is-pending { border-left-color: var(--fn-blue); background: rgba(2, 132, 199, 0.06); }
+.status-banner.is-pending i, .status-banner.is-pending svg { color: var(--fn-blue); }
+.status-banner.is-pending .status-banner-badge { background: var(--fn-blue); }
+/* Feed unavailable — honest neutral gray, never reads as "clear". */
+.status-banner.is-unknown { border-left-color: var(--muted); background: var(--bg-soft); }
+.status-banner.is-unknown i, .status-banner.is-unknown svg { color: var(--muted); }
+.status-banner.is-unknown .status-banner-badge { background: var(--muted); }
+.status-banner-text { font-size: 12.5px; font-weight: 700; color: var(--text); line-height: 1.3; overflow-wrap: anywhere; }
+
+/* Campus-specific rain alert — full-width row between banner and grid. */
+.campus-rain-alert {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 9px 16px; border-bottom: 1px solid var(--divider);
+  border-left: 3px solid var(--fn-blue); background: rgba(2, 132, 199, 0.06);
+  font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.35;
+}
+.campus-rain-alert i, .campus-rain-alert svg { width: 16px; height: 16px; stroke-width: 2.1; flex-shrink: 0; color: var(--fn-blue); }
+.campus-rain-alert span { min-width: 0; overflow-wrap: anywhere; }
+.campus-rain-alert.sev-severe { border-left-color: var(--fn-red); background: rgba(220, 38, 38, 0.06); }
+.campus-rain-alert.sev-severe i, .campus-rain-alert.sev-severe svg { color: var(--fn-red); }
+
 /* Bento container: gray inset backing so the white cards lift off it. */
 .status-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; background: var(--bg); }
 
-/* Shared bento card chrome for both weather + notice. */
+/* Dual-location micro-card grid — single column on mobile, side-by-side ≥560px. */
+.loc-grid { display: grid; grid-template-columns: 1fr; gap: 12px; min-width: 0; }
+@media (min-width: 560px) { .loc-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.loc-card { min-width: 0; }
+.loc-card-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding-bottom: 10px; margin-bottom: 2px; border-bottom: 1px solid var(--divider); min-width: 0;
+}
+.loc-title {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--navy); overflow-wrap: anywhere;
+}
+.loc-title i, .loc-title svg { width: 15px; height: 15px; stroke-width: 2; flex-shrink: 0; color: var(--fn-blue); }
+.loc-sub {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; flex-shrink: 0;
+}
+/* My-Location card without a GPS fix — enable prompt / off states. */
+.loc-enable { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 6px 0 2px; }
+.loc-hint { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.loc-off-msg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.loc-off-msg i, .loc-off-msg svg { width: 15px; height: 15px; stroke-width: 2; flex-shrink: 0; }
+.loc-enable-btn {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 8px 14px; font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: #fff; background: var(--fn-blue); border: 0; border-radius: 2px; box-shadow: none;
+}
+.loc-enable-btn i, .loc-enable-btn svg { width: 15px; height: 15px; stroke-width: 2.2; }
+.loc-enable-btn:hover { filter: brightness(1.05); }
+.loc-enable-btn[disabled] { opacity: 0.6; cursor: default; }
+.loc-off {
+  display: flex; align-items: center; gap: 7px; padding: 8px 0 2px;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+}
+.loc-off i, .loc-off svg { width: 15px; height: 15px; stroke-width: 2; flex-shrink: 0; }
+
+/* Shared card chrome for both weather + notice — flat, hairline-bordered. */
 .wx-panel, .notice {
-  border: 1px solid var(--border); border-radius: 16px;
-  box-shadow: var(--shadow-sm); overflow: hidden; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: none; overflow: hidden; background: var(--card);
 }
 
 /* --- Loading / error states --- */
@@ -1338,37 +1423,39 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 .wx-icon { width: 24px; height: 24px; color: var(--muted); stroke-width: 1.8; margin: 2px 0 0 2px; }
 
 .wx-status-wrap { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-left: 12px; border-left: 1px solid var(--divider); }
-.wx-indicator { width: 22px; height: 3px; border-radius: 1px; background: var(--blue); }
+.wx-indicator { width: 22px; height: 3px; border-radius: 0; background: var(--fn-blue); }
 .wx-status { font-size: 12.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); line-height: 1.2; }
 .wx-sub { font-size: 11.5px; font-weight: 600; color: var(--muted); line-height: 1.3; }
 
-.wx-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* Compact key-value grid — flat spec-sheet rows, no filled boxes. */
+.wx-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; border-top: 1px solid var(--divider); }
 .wx-metric {
-  display: flex; flex-direction: column; gap: 2px; min-width: 0;
-  padding: 7px 9px; background: var(--bg-soft); border: 1px solid var(--divider); border-radius: 8px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0;
+  padding: 6px 0; border-bottom: 1px solid var(--divider);
 }
 .wx-metric-k { font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
-.wx-metric-v { font-size: 14px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wx-metric-v { font-size: 13.5px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .wx-unavail .wx-lead { align-items: center; }
 .wx-unavail .wx-temp { color: var(--muted); }
 
 /* Weather severity — indicator bar + icon tint only, never whole card */
-.wx-panel.sev-clear  .wx-indicator { background: var(--blue); }
-.wx-panel.sev-clear  .wx-icon { color: var(--blue); }
-.wx-panel.sev-low    .wx-indicator { background: var(--blue); }
-.wx-panel.sev-low    .wx-icon { color: var(--blue); }
-.wx-panel.sev-mod    .wx-indicator { background: var(--gold-accent); }
-.wx-panel.sev-mod    .wx-icon { color: var(--gold); }
-.wx-panel.sev-high   .wx-indicator { background: var(--gold-accent); }
-.wx-panel.sev-high   .wx-icon { color: var(--gold); }
-.wx-panel.sev-severe .wx-indicator { background: var(--red); }
-.wx-panel.sev-severe .wx-icon { color: var(--red); }
+.wx-panel.sev-clear  .wx-indicator { background: var(--fn-blue); }
+.wx-panel.sev-clear  .wx-icon { color: var(--fn-blue); }
+.wx-panel.sev-low    .wx-indicator { background: var(--fn-blue); }
+.wx-panel.sev-low    .wx-icon { color: var(--fn-blue); }
+.wx-panel.sev-mod    .wx-indicator { background: var(--fn-amber); }
+.wx-panel.sev-mod    .wx-icon { color: var(--fn-amber); }
+.wx-panel.sev-high   .wx-indicator { background: var(--fn-amber); }
+.wx-panel.sev-high   .wx-icon { color: var(--fn-amber); }
+.wx-panel.sev-severe .wx-indicator { background: var(--fn-red); }
+.wx-panel.sev-severe .wx-icon { color: var(--fn-red); }
 
 /* =============================================================
    FLOOD ADVISORY — sub-widget nested inside the weather card
-   (Google Flood Hub). Cyan = calm/none, amber = elevated,
-   red = severe/extreme, gray = advisory unavailable.
+   (rainfall-derived, Open-Meteo). Slate blue = calm/low, amber =
+   moderate, red = high, gray = the neutral "Monitoring" state
+   (never an error). Sharp edges, hairline separators, no fill.
    ============================================================= */
 .wx-flood {
   margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--divider);
@@ -1376,40 +1463,37 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 }
 .flood-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .flood-title { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); }
-.flood-title i, .flood-title svg { width: 15px; height: 15px; color: var(--cyan-deep); stroke-width: 2; }
+.flood-title i, .flood-title svg { width: 15px; height: 15px; color: var(--fn-blue); stroke-width: 2; }
 .flood-badge {
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
-  padding: 3px 10px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em;
-  border-radius: 999px; border: 1px solid var(--border); background: var(--bg-soft); color: var(--muted);
+  padding: 3px 9px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em;
+  border-radius: 2px; border: 1px solid var(--border); background: var(--card); color: var(--muted);
 }
 .flood-badge i, .flood-badge svg { width: 13px; height: 13px; stroke-width: 2.2; }
-.flood-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* Metrics as a flat spec row — no filled boxes, hairline dividers only. */
+.flood-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; border-top: 1px solid var(--divider); }
 .flood-metric {
-  display: flex; flex-direction: column; gap: 2px; min-width: 0;
-  padding: 7px 9px; background: var(--bg-soft); border: 1px solid var(--divider); border-radius: 8px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0;
+  padding: 6px 0; border-bottom: 1px solid var(--divider);
 }
 .flood-metric-k { font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
-.flood-metric-v { font-size: 13px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.flood-metric-v { font-size: 13px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; text-align: right; }
 .flood-tip {
   display: flex; gap: 7px; font-size: 11.5px; line-height: 1.45; color: var(--text);
-  padding: 9px 11px; border-radius: 10px; background: var(--bg-soft);
+  padding: 8px 0 0; border-top: 1px solid var(--divider);
 }
 .flood-tip i, .flood-tip svg { width: 15px; height: 15px; stroke-width: 2; flex-shrink: 0; margin-top: 1px; }
 .flood-src { font-size: 10.5px; color: var(--muted); }
-.flood-src a { color: var(--blue); font-weight: 700; }
+.flood-src a { color: var(--fn-blue); font-weight: 700; }
 .flood-src a:hover { text-decoration: underline; }
 
-.wx-flood.is-none .flood-badge { color: var(--cyan-deep); border-color: var(--cyan-mid); background: var(--cyan-soft); }
-.wx-flood.is-none .flood-tip { background: var(--cyan-soft); color: var(--cyan-deep); }
-.wx-flood.is-none .flood-tip i { color: var(--cyan-deep); }
-.wx-flood.is-elevated .flood-badge { color: #8A6D0B; border-color: var(--gold-mid); background: var(--gold-soft); }
-.wx-flood.is-elevated .flood-tip { background: var(--gold-soft); color: #7A5F0A; }
-.wx-flood.is-elevated .flood-tip i { color: #8A6D0B; }
-.wx-flood.is-severe .flood-badge, .wx-flood.is-extreme .flood-badge { color: var(--red); border-color: var(--red-mid); background: var(--red-soft); }
-.wx-flood.is-severe .flood-tip, .wx-flood.is-extreme .flood-tip { background: var(--red-soft); color: #8E1B1B; }
-.wx-flood.is-severe .flood-tip i, .wx-flood.is-extreme .flood-tip i { color: var(--red); }
-.wx-flood.is-unknown .flood-badge { color: var(--muted); border-color: var(--border); background: var(--bg-soft); }
-.wx-flood.is-unknown .flood-tip { background: var(--bg-soft); color: var(--muted); }
+.wx-flood.is-none .flood-badge { color: var(--fn-blue); border-color: var(--fn-blue); background: rgba(2, 132, 199, 0.06); }
+.wx-flood.is-none .flood-tip i { color: var(--fn-blue); }
+.wx-flood.is-elevated .flood-badge { color: var(--fn-amber); border-color: var(--fn-amber); background: rgba(217, 119, 6, 0.07); }
+.wx-flood.is-elevated .flood-tip i { color: var(--fn-amber); }
+.wx-flood.is-severe .flood-badge, .wx-flood.is-extreme .flood-badge { color: var(--fn-red); border-color: var(--fn-red); background: rgba(220, 38, 38, 0.06); }
+.wx-flood.is-severe .flood-tip i, .wx-flood.is-extreme .flood-tip i { color: var(--fn-red); }
+.wx-flood.is-unknown .flood-badge { color: var(--muted); border-color: var(--border); background: var(--card); }
 .wx-flood.is-unknown .flood-tip i { color: var(--muted); }
 /* =============================================================
    SUSPENSION — official notice card (accent bar + pill banner)
@@ -1432,68 +1516,40 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 
 .notice-headline { font-size: 14px; font-weight: 800; line-height: 1.35; letter-spacing: -0.01em; color: var(--text); margin-bottom: 10px; }
 
-/* Inline pill banner — replaces the old 8-box metadata grid. */
-.notice-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
-.notice-tag {
-  display: inline-flex; align-items: center; white-space: nowrap;
-  padding: 3px 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.01em;
-  border-radius: 999px; border: 1px solid var(--border); background: var(--bg-soft); color: var(--text);
+/* Announcement FEED card — official title, timestamp, tags, CTA, empty state. */
+.feed-title { font-size: 13.5px; font-weight: 800; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+.feed-time {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+  font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums;
 }
-.notice-tag.tag-scope { color: var(--navy); border-color: var(--blue-mid); background: var(--blue-soft); }
-.notice-tag.tag-time { color: var(--blue); border-color: var(--blue-mid); background: var(--blue-soft); }
-.notice-tag.tag-modality { color: #8A6D0B; border-color: var(--gold-mid); background: var(--gold-soft); }
-.notice-tag.tag-source { color: var(--muted); border-color: var(--border); background: var(--card); }
-.notice-tag.tag-neutral { color: var(--muted); }
+.feed-time i, .feed-time svg { width: 13px; height: 13px; stroke-width: 2; flex-shrink: 0; }
+.feed-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.feed-tag {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 3px 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--fn-blue); background: rgba(2, 132, 199, 0.06); border: 1px solid var(--fn-blue); border-radius: 2px;
+}
+.feed-cta {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  padding: 8px 13px; font-size: 12px; font-weight: 800; letter-spacing: 0.01em;
+  color: #fff; background: var(--fn-blue); border-radius: 2px; box-shadow: none;
+}
+.feed-cta i, .feed-cta svg { width: 14px; height: 14px; stroke-width: 2.2; }
+.feed-cta:hover { filter: brightness(1.05); }
+.feed-empty {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 800; letter-spacing: 0.03em; color: var(--fn-green);
+}
 
-.notice-conf { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: var(--muted); text-transform: uppercase; }
-.notice-conf-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--gold-accent); }
-.notice.is-suspended .notice-conf-dot { background: var(--red); }
-.notice.is-clear .notice-conf-dot { background: var(--success); }
-.notice.is-unknown .notice-conf-dot { background: var(--muted); }
+/* Suspension excerpt — plain inline text, no filled box. */
 .notice-note {
-  margin-top: 10px; padding: 9px 11px; font-size: 12px; line-height: 1.5; color: var(--text);
-  background: var(--bg-soft); border-left: 3px solid var(--border); border-radius: 0 8px 8px 0;
+  margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--muted);
 }
 .notice-reason {
   display: flex; align-items: flex-start; gap: 6px; margin-top: 8px;
   font-size: 11.5px; line-height: 1.45; color: var(--muted);
 }
 .notice-reason i, .notice-reason svg { width: 13px; height: 13px; stroke-width: 2; flex-shrink: 0; margin-top: 2px; }
-
-/* Per-class breakdown (schedule-aware) */
-.notice-classes { margin-top: 12px; border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
-.notice-classes-h {
-  padding: 7px 10px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--muted); background: var(--bg-soft); border-bottom: 1px solid var(--divider);
-}
-.cls-list { display: flex; flex-direction: column; }
-.cls-card {
-  padding: 10px 12px; border-bottom: 1px solid var(--divider);
-  border-left: 3px solid var(--border); background: var(--card);
-}
-.cls-card:last-child { border-bottom: 0; }
-.cls-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cls-time { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cls-chip {
-  flex-shrink: 0; display: inline-flex; align-items: center;
-  padding: 2px 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
-  border: 1px solid var(--border); border-radius: 4px; white-space: nowrap;
-}
-.cls-body { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; margin-top: 5px; }
-.cls-name { font-size: 13px; font-weight: 800; color: var(--text); line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
-.cls-type {
-  flex-shrink: 0; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--muted); padding: 1px 6px; border: 1px solid var(--divider); border-radius: 3px; background: var(--bg-soft);
-}
-.cls-note { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
-
-/* Per-class status color — left bar + chip tint */
-.cls-card.is-suspended { border-left-color: var(--red); }
-.cls-card.is-suspended .cls-chip { color: var(--red); border-color: var(--red); background: rgba(198, 40, 40, 0.06); }
-.cls-card.is-online { border-left-color: var(--gold-accent); }
-.cls-card.is-online .cls-chip { color: #8A6D0B; border-color: var(--gold-mid); background: var(--gold-soft); }
-.cls-card.is-clear { border-left-color: var(--success); }
-.cls-card.is-clear .cls-chip { color: var(--success); border-color: var(--success); background: rgba(46, 125, 50, 0.06); }
 
 .notice-foot {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
@@ -1505,53 +1561,30 @@ input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--blue); f
 }
 .notice-updated i, .notice-updated svg { width: 13px; height: 13px; stroke-width: 2; flex-shrink: 0; }
 .notice-links { font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.notice-link { color: var(--blue); font-weight: 700; }
+.notice-link { color: var(--fn-blue); font-weight: 700; }
 .notice-link:hover { text-decoration: underline; }
 .notice-link-sep { margin: 0 7px; color: var(--divider); }
 
 /* Notice status tone — accent bar + status text only (never full-card fill) */
-.notice.is-suspended .notice-bar { background: var(--red); }
-.notice.is-suspended .notice-status { color: var(--red); }
-.notice.is-partial .notice-bar { background: var(--gold-accent); }
-.notice.is-partial .notice-status { color: #8A6D0B; }
-.notice.is-pending .notice-bar { background: var(--blue); }
-.notice.is-pending .notice-status { color: var(--blue); }
-.notice.is-clear .notice-bar { background: var(--success); }
-.notice.is-clear .notice-status { color: var(--success); }
+.notice.is-suspended .notice-bar { background: var(--fn-red); }
+.notice.is-suspended .notice-status { color: var(--fn-red); }
+.notice.is-partial .notice-bar { background: var(--fn-amber); }
+.notice.is-partial .notice-status { color: var(--fn-amber); }
+.notice.is-pending .notice-bar { background: var(--fn-blue); }
+.notice.is-pending .notice-status { color: var(--fn-blue); }
+.notice.is-clear .notice-bar { background: var(--fn-green); }
+.notice.is-clear .notice-status { color: var(--fn-green); }
 .notice.is-unknown .notice-bar { background: var(--muted); }
 .notice.is-unknown .notice-status { color: var(--muted); }
-/* =============================================================
-   WEATHER-BASED RISK — small SECONDARY advisory row.
-   Never a big card; never overrides an official suspension.
-   ============================================================= */
-.wx-risk-row {
-  display: flex; align-items: stretch; gap: 0;
-  margin: 0 12px 12px; border: 1px solid var(--border); border-radius: 12px;
-  overflow: hidden; background: var(--bg-soft); box-shadow: var(--shadow-sm);
-}
-.wx-risk-bar { flex-shrink: 0; width: 4px; background: var(--muted); align-self: stretch; }
-.wx-risk-body { padding: 9px 14px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
-.wx-risk-body strong { color: var(--text); font-weight: 800; letter-spacing: 0.02em; }
-.wx-risk-row.is-suspended .wx-risk-bar { background: var(--red); }
-.wx-risk-row.is-suspended .wx-risk-body strong { color: var(--red); }
-.wx-risk-row.is-partial .wx-risk-bar { background: var(--gold-accent); }
-.wx-risk-row.is-partial .wx-risk-body strong { color: #8A6D0B; }
-.wx-risk-row.is-pending .wx-risk-bar { background: var(--blue); }
-.wx-risk-row.is-pending .wx-risk-body strong { color: var(--blue); }
 
 /* =============================================================
    RESPONSIVE — mobile-first bento: single column that fans into
    a two-card grid on wider viewports. No horizontal scroll or
    text clipping from 320px up.
    ============================================================= */
-@media (min-width: 720px) {
-  .status-grid { grid-template-columns: minmax(260px, 0.9fr) 1.1fr; align-items: stretch; }
-  .wx-panel { justify-content: flex-start; }
-}
 @media (max-width: 400px) {
   .status-head { flex-direction: column; align-items: flex-start; gap: 3px; }
   .wx-temp { font-size: 30px; }
   .wx-metrics, .flood-metrics { grid-template-columns: 1fr; }
-  .cls-top { flex-wrap: wrap; gap: 4px 8px; }
   .flood-head { row-gap: 4px; }
 }

@@ -33,9 +33,10 @@
   "use strict";
 
   var CFG = Object.assign({
-    lat: 14.689, lon: 121.0437, place: "Quezon City",
+    lat: 14.7011, lon: 121.0330, place: "Quezon City",
     weatherTtlMin: 15,
-    suspFeed: "data/suspensions.json",
+    suspFeed: "/api/suspensions",
+    suspFeedFallback: "data/suspensions.json",
     scheduleFeed: "data/schedule.json",
     floodFeed: "data/flood.json",
     debug: false,
@@ -90,11 +91,6 @@
     var h = +m[1], mm = +m[2];
     if (h > 23 || mm > 59) return null;
     return h * 60 + mm;
-  }
-  function fmtClock(min) {
-    if (min == null) return "--";
-    var h = Math.floor(min / 60), m = min % 60, ap = h >= 12 ? "PM" : "AM", h12 = h % 12 || 12;
-    return h12 + ":" + (m < 10 ? "0" + m : m) + " " + ap;
   }
   function addDays(iso, n) {
     var d = new Date(iso + "T00:00:00");
@@ -409,6 +405,8 @@
         base.source = pick.upcoming.source;
         base.sourceUrl = pick.upcoming.sourceUrl;
         base.publishedAt = pick.upcoming.publishedAt;
+        base.title = pick.upcoming.title;
+        base.levels = pick.upcoming.levels;
         base.confidence = "medium";
       }
       dbg("status=" + base.status + " (no active suspension today)");
@@ -420,6 +418,7 @@
     base.modality = n.modality; base.reason = n.reason; base.source = n.source;
     base.sourceUrl = n.sourceUrl; base.publishedAt = n.publishedAt;
     base.effectiveDate = n.effectiveDate || today; base.coversQcu = n.coversQcu;
+    base.title = n.title; base.levels = n.levels;
 
     if (n.coversQcu === false) {
       // Real announcement, but K-12 only → QCU classes proceed.
@@ -469,12 +468,36 @@
   }
 
   /* =============================================================
+     USER LOCATION — the ETA page persists the device's GPS fix to
+     localStorage ("qcu:user-location"). Weather + flood advisories
+     center on that real location so they reflect where the student
+     actually is. If no recent fix exists (ETA never opened, or the
+     reading is stale/invalid), fall back to the campus coordinate.
+     ============================================================= */
+  var LOC_KEY = "qcu:user-location";
+  var LOC_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h — older fixes are dropped.
+  function getUserLocation() {
+    try {
+      var raw = localStorage.getItem(LOC_KEY);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      if (!p || typeof p.lat !== "number" || typeof p.lon !== "number") return null;
+      if (p.lat < -90 || p.lat > 90 || p.lon < -180 || p.lon > 180) return null;
+      if (p.t && (Date.now() - p.t) > LOC_MAX_AGE_MS) return null; // stale
+      return { lat: p.lat, lon: p.lon, live: true };
+    } catch (e) { return null; }
+  }
+
+  /* =============================================================
      FETCHERS — every remote call fails soft. A failed suspension
      fetch yields `undefined` (→ UNKNOWN), never `[]` (→ not-suspended).
      ============================================================= */
-  function fetchWeather() {
+  function fetchWeather(loc) {
+    loc = loc || { lat: CFG.lat, lon: CFG.lon };
+    // Cache per rounded location (~1km) so moving invalidates stale weather.
+    var cacheKey = CACHE_KEY + ":" + loc.lat.toFixed(2) + "," + loc.lon.toFixed(2);
     try {
-      var raw = localStorage.getItem(CACHE_KEY);
+      var raw = localStorage.getItem(cacheKey);
       if (raw) {
         var c = JSON.parse(raw);
         if (c && c.t && (Date.now() - c.t) < CFG.weatherTtlMin * 60000 && c.data) {
@@ -482,7 +505,7 @@
         }
       }
     } catch (e) { /* ignore cache errors */ }
-    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + CFG.lat + "&longitude=" + CFG.lon +
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat + "&longitude=" + loc.lon +
       "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation" +
       "&hourly=precipitation_probability&timezone=Asia%2FManila&forecast_days=1";
     return fetch(url).then(function (r) {
@@ -501,17 +524,26 @@
         temp: cur.temperature_2m, feels: cur.apparent_temperature, humidity: cur.relative_humidity_2m,
         code: cur.weather_code, precip: cur.precipitation, pop: pop
       };
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
+      try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
       return data;
     }).catch(function (e) { dbg("weather failed", e); return null; });
   }
   // Returns array on success, [] for empty feed, undefined on failure.
+  // Primary source is the serverless proxy (/api/suspensions) which scrapes the
+  // live QC announcements page; if that is unreachable (local file://, function
+  // down) we fall back to the static bundled JSON before giving up → UNKNOWN.
   function fetchSuspensions() {
-    return fetch(CFG.suspFeed, { cache: "no-store" }).then(function (r) {
+    return fetchSuspFrom(CFG.suspFeed).catch(function (e) {
+      dbg("primary suspensions feed failed → trying fallback", e);
+      if (!CFG.suspFeedFallback) throw e;
+      return fetchSuspFrom(CFG.suspFeedFallback);
+    }).catch(function (e) { dbg("suspensions fetch FAILED → UNKNOWN", e); return undefined; });
+  }
+  function fetchSuspFrom(url) {
+    return fetch(url, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("susp HTTP " + r.status);
       return r.json();
-    }).then(function (j) { return Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : []); })
-      .catch(function (e) { dbg("suspensions fetch FAILED → UNKNOWN", e); return undefined; });
+    }).then(function (j) { return Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : []); });
   }
   function fetchSchedule() {
     return fetch(CFG.scheduleFeed, { cache: "no-store" }).then(function (r) {
@@ -520,72 +552,125 @@
     }).then(function (j) { return Array.isArray(j) ? j : []; })
       .catch(function (e) { dbg("schedule fetch failed", e); return []; });
   }
-  // Returns the normalized flood advisory object, or undefined on failure.
-  // A failed/absent feed must render "advisory unavailable" — NEVER a false
-  // "no flood risk". The feed itself never fabricates: an unset field is null.
-  function fetchFlood() {
-    return fetch(CFG.floodFeed, { cache: "no-store" }).then(function (r) {
+  // Live keyless flood signal from the Open-Meteo Flood API (river-discharge
+  // forecast, m³/s). Returns { discharge, dischargeTrend } or undefined on
+  // failure. Absolute flood RISK is derived separately from rainfall (see
+  // deriveFlood) — this only supplies the supporting river-flow trend. Never
+  // fabricates: a failed fetch returns undefined so the advisory reads
+  // "unavailable", not a false "no flood risk".
+  function fetchFlood(loc) {
+    loc = loc || { lat: CFG.lat, lon: CFG.lon };
+    var url = "https://flood-api.open-meteo.com/v1/flood?latitude=" + loc.lat +
+      "&longitude=" + loc.lon + "&daily=river_discharge&forecast_days=7";
+    return fetch(url).then(function (r) {
       if (!r.ok) throw new Error("flood HTTP " + r.status);
       return r.json();
-    }).then(function (j) { return (j && typeof j === "object") ? j : undefined; })
-      .catch(function (e) { dbg("flood fetch failed → advisory unavailable", e); return undefined; });
+    }).then(function (j) {
+      var d = j && j.daily && j.daily.river_discharge;
+      if (!Array.isArray(d) || d.length === 0) return undefined;
+      var today = (typeof d[0] === "number") ? d[0] : null;
+      if (today == null) return undefined;
+      // Trend: mean of the next few days' discharge vs. today, with a 5% band.
+      var trend = null;
+      var future = d.slice(1, 4).filter(function (v) { return typeof v === "number"; });
+      if (future.length) {
+        var mean = future.reduce(function (a, b) { return a + b; }, 0) / future.length;
+        var delta = mean - today, thr = Math.max(1, today * 0.05);
+        trend = delta > thr ? "RISING" : (delta < -thr ? "FALLING" : "STABLE");
+      }
+      return { discharge: today, dischargeTrend: trend };
+    }).catch(function (e) { dbg("flood fetch failed → advisory unavailable", e); return undefined; });
+  }
+
+  // Combine live rainfall (from the weather feed) with the river-discharge
+  // trend into one advisory object. Risk LEVEL is rainfall-derived — an honest
+  // computed advisory, NOT an official flood warning:
+  //   ≥15 mm → SEVERE (high) · ≥5 mm → ELEVATED (moderate) · else NONE (low).
+  // If rainfall is missing but river-discharge is present, the trend drives the
+  // level (RISING → ELEVATED, else NONE). Returns undefined only when BOTH
+  // sources are missing → the calm "Monitoring" state (never "unavailable").
+  function deriveFlood(wx, floodApi) {
+    var hasRain = wx && typeof wx.precip === "number";
+    var hasFlow = floodApi && typeof floodApi.discharge === "number";
+    if (!hasRain && !hasFlow) return undefined;
+    var out = { derived: true, source: "Open-Meteo · rainfall-derived", sourceUrl: "https://open-meteo.com/en/docs/flood-api" };
+    if (hasRain) {
+      out.precip = wx.precip;
+      out.riskLevel = wx.precip >= 15 ? "SEVERE" : (wx.precip >= 5 ? "ELEVATED" : "NONE");
+    } else if (hasFlow) {
+      // No live rainfall, but river-discharge is available: infer a level from
+      // its trend so we stay LOW/MODERATE rather than falling back to Monitoring.
+      out.riskLevel = floodApi.dischargeTrend === "RISING" ? "ELEVATED" : "NONE";
+    } else {
+      out.riskLevel = "UNKNOWN";
+    }
+    if (hasFlow) { out.discharge = floodApi.discharge; out.dischargeTrend = floodApi.dischargeTrend || null; }
+    return out;
   }
 
   /* =============================================================
      HTML BUILDERS — Part A: institutional / public-service styling.
      Weather = compact info panel. Suspension = formal notice table.
      ============================================================= */
-  function weatherBlockHTML(wx, flood) {
-    var inner, sevClass;
+  // Weather SEGMENT for one location — returns { sevClass, html }. No card
+  // wrapper and no flood (the caller composes those). The place name lives in
+  // the card head now, so the old " · place" suffix on .wx-sub is dropped.
+  function weatherSegmentHTML(wx) {
     if (!wx || wx.temp == null) {
-      sevClass = "wx-unavail";
-      inner =
-        '<div class="wx-lead">' +
-          '<div class="wx-primary"><span class="wx-temp">--</span></div>' +
-          '<div class="wx-status-wrap"><span class="wx-status">WEATHER UNAVAILABLE</span>' +
-          '<span class="wx-sub">Live data could not be loaded.</span></div>' +
-        '</div>';
-    } else {
-      var w = wmo(wx.code), label = weatherStatusLabel(wx.code, wx.pop);
-      sevClass = weatherSevClass(wx.code);
-      var meta = [];
-      if (wx.feels != null) meta.push(["Feels like", Math.round(wx.feels) + "°C"]);
-      if (wx.humidity != null) meta.push(["Humidity", Math.round(wx.humidity) + "%"]);
-      if (wx.pop != null) meta.push(["Rain chance", Math.round(wx.pop) + "%"]);
-      if (wx.precip != null) meta.push(["Precip", (Math.round(wx.precip * 10) / 10) + " mm"]);
-      var metaHtml = meta.map(function (m) {
-        return '<div class="wx-metric"><span class="wx-metric-k">' + esc(m[0]) + '</span><span class="wx-metric-v">' + esc(m[1]) + '</span></div>';
-      }).join("");
-      inner =
+      return {
+        sevClass: "wx-unavail",
+        html:
+          '<div class="wx-lead">' +
+            '<div class="wx-primary"><span class="wx-temp">--</span></div>' +
+            '<div class="wx-status-wrap"><span class="wx-status">WEATHER UNAVAILABLE</span>' +
+            '<span class="wx-sub">Live data could not be loaded.</span></div>' +
+          '</div>'
+      };
+    }
+    var w = wmo(wx.code), label = weatherStatusLabel(wx.code, wx.pop);
+    var meta = [];
+    if (wx.feels != null) meta.push(["Feels like", Math.round(wx.feels) + "°C"]);
+    if (wx.humidity != null) meta.push(["Humidity", Math.round(wx.humidity) + "%"]);
+    if (wx.pop != null) meta.push(["Rain chance", Math.round(wx.pop) + "%"]);
+    if (wx.precip != null) meta.push(["Precip", (Math.round(wx.precip * 10) / 10) + " mm"]);
+    var metaHtml = meta.map(function (m) {
+      return '<div class="wx-metric"><span class="wx-metric-k">' + esc(m[0]) + '</span><span class="wx-metric-v">' + esc(m[1]) + '</span></div>';
+    }).join("");
+    return {
+      sevClass: weatherSevClass(wx.code),
+      html:
         '<div class="wx-lead">' +
           '<div class="wx-primary"><span class="wx-temp">' + Math.round(wx.temp) + '</span><span class="wx-unit">°C</span>' +
             '<i data-lucide="' + w[1] + '" class="wx-icon"></i></div>' +
           '<div class="wx-status-wrap"><span class="wx-indicator" aria-hidden="true"></span>' +
             '<span class="wx-status">' + esc(label) + '</span>' +
-            '<span class="wx-sub">' + esc(w[0]) + ' · ' + esc(CFG.place) + '</span></div>' +
+            '<span class="wx-sub">' + esc(w[0]) + '</span></div>' +
         '</div>' +
-        (metaHtml ? '<div class="wx-metrics">' + metaHtml + '</div>' : '');
-    }
-    return '<div class="wx-panel ' + sevClass + '">' + inner + floodBlockHTML(flood) + '</div>';
+        (metaHtml ? '<div class="wx-metrics">' + metaHtml + '</div>' : '')
+    };
   }
 
-  // Flood Advisory sub-widget (Google Flood Hub feed), rendered INSIDE the
-  // weather card. Never fabricates: an undefined feed or UNKNOWN risk shows
-  // "advisory unavailable", never a false "no flood risk". A numeric 24h
-  // inundation probability is shown only when the API actually supplies one.
+  // Flood Advisory sub-widget (rainfall-derived, Open-Meteo), rendered INSIDE
+  // the weather card. Risk LEVEL comes from live rainfall thresholds; river
+  // flow/trend from the Flood API is shown only as supporting context. Never
+  // fabricates: on a total data outage it shows a calm "Monitoring" state,
+  // never the word "unavailable" and never a false "no flood risk".
   var FLOOD_META = {
-    EXTREME:  { cls: "is-extreme",  label: "Extreme flood risk",   icon: "alert-triangle" },
-    SEVERE:   { cls: "is-severe",   label: "Severe flood risk",    icon: "alert-triangle" },
-    ELEVATED: { cls: "is-elevated", label: "Above-normal level",   icon: "alert-triangle" },
-    NONE:     { cls: "is-none",     label: "No flooding expected",  icon: "waves" },
-    UNKNOWN:  { cls: "is-unknown",  label: "Advisory unavailable",  icon: "droplets" }
+    EXTREME:  { cls: "is-extreme",  label: "High flood risk",     icon: "alert-triangle" },
+    SEVERE:   { cls: "is-severe",   label: "High flood risk",     icon: "alert-triangle" },
+    ELEVATED: { cls: "is-elevated", label: "Moderate flood risk", icon: "alert-triangle" },
+    NONE:     { cls: "is-none",     label: "Low flood risk",      icon: "waves" },
+    // Never "unavailable": on a total data outage we show a calm, honest
+    // "Monitoring" state — we don't fabricate a LOW reading, but we never
+    // alarm or read as an error either.
+    UNKNOWN:  { cls: "is-unknown",  label: "Monitoring",          icon: "activity" }
   };
   var FLOOD_TIP = {
-    EXTREME:  "Avoid low-lying roads and riverbanks. Follow QC DRRMO advisories and be ready to evacuate if instructed.",
-    SEVERE:   "Steer clear of flood-prone routes and underpasses. Monitor QC DRRMO and PAGASA updates closely.",
-    ELEVATED: "River levels are above normal — avoid low-lying underpasses and keep an alternate route ready.",
-    NONE:     "No flooding expected along nearby rivers. Keep normal precautions during heavy rain.",
-    UNKNOWN:  "Live flood data is unavailable — check PAGASA and QC DRRMO before travelling in heavy rain."
+    EXTREME:  "Heavy rainfall — flooding likely on low-lying roads. Avoid flood-prone routes and follow PAGASA / QC DRRMO advisories.",
+    SEVERE:   "Heavy rainfall — flooding likely on low-lying roads. Avoid flood-prone routes and follow PAGASA / QC DRRMO advisories.",
+    ELEVATED: "Moderate rainfall — localized flooding possible in low-lying areas. Keep an alternate route ready.",
+    NONE:     "Low rainfall — flooding not expected. Keep normal precautions during heavy rain.",
+    UNKNOWN:  "Awaiting live rainfall / river data — check PAGASA and QC DRRMO before travelling in heavy rain."
   };
   var FLOOD_TREND = { RISING: "Rising", FALLING: "Falling", STABLE: "Stable" };
 
@@ -593,81 +678,37 @@
     var lvl = (flood && flood.riskLevel) ? String(flood.riskLevel).toUpperCase() : "UNKNOWN";
     var m = FLOOD_META[lvl] || FLOOD_META.UNKNOWN;
     var metrics = [];
-    if (flood && flood.waterLevel && FLOOD_TREND[flood.waterLevel.trend])
-      metrics.push(["Water level", FLOOD_TREND[flood.waterLevel.trend]]);
-    if (flood && flood.outlook24h && FLOOD_META[String(flood.outlook24h).toUpperCase()])
-      metrics.push(["24h outlook", FLOOD_META[String(flood.outlook24h).toUpperCase()].label]);
-    if (flood && typeof flood.inundationProbability24h === "number")
-      metrics.push(["24h inundation", flood.inundationProbability24h + "%"]);
-    if (flood && flood.gauge && flood.gauge.river)
-      metrics.push(["Nearest river", flood.gauge.river]);
+    if (flood && typeof flood.precip === "number")
+      metrics.push(["Rainfall", (Math.round(flood.precip * 10) / 10) + " mm"]);
+    if (flood && typeof flood.discharge === "number")
+      metrics.push(["River flow", Math.round(flood.discharge) + " m³/s"]);
+    if (flood && flood.dischargeTrend && FLOOD_TREND[flood.dischargeTrend])
+      metrics.push(["Flow trend", FLOOD_TREND[flood.dischargeTrend]]);
     var metaHtml = metrics.map(function (x) {
       return '<div class="flood-metric"><span class="flood-metric-k">' + esc(x[0]) + '</span><span class="flood-metric-v">' + esc(x[1]) + '</span></div>';
     }).join("");
     var tip = FLOOD_TIP[lvl] || FLOOD_TIP.UNKNOWN;
-    var srcUrl = (flood && flood.sourceUrl) || "https://sites.research.google/floods/";
-    var srcName = (flood && flood.source) || "Google Flood Hub";
+    var srcUrl = (flood && flood.sourceUrl) || "https://open-meteo.com/en/docs/flood-api";
+    var srcName = (flood && flood.source) || "Open-Meteo";
     return '<div class="wx-flood ' + m.cls + '">' +
       '<div class="flood-head">' +
         '<span class="flood-title"><i data-lucide="waves"></i>Flood Advisory</span>' +
         '<span class="flood-badge"><i data-lucide="' + m.icon + '"></i>' + esc(m.label) + '</span>' +
       '</div>' +
       (metaHtml ? '<div class="flood-metrics">' + metaHtml + '</div>' : '') +
-      '<p class="flood-tip"><i data-lucide="' + (lvl === "NONE" ? "droplets" : (lvl === "UNKNOWN" ? "info" : "alert-triangle")) + '"></i>' + esc(tip) + '</p>' +
+      '<p class="flood-tip"><i data-lucide="' + (lvl === "NONE" ? "droplets" : (lvl === "UNKNOWN" ? "activity" : "alert-triangle")) + '"></i>' + esc(tip) + '</p>' +
       '<p class="flood-src">Source: <a href="' + esc(srcUrl) + '" target="_blank" rel="noopener">' + esc(srcName) + '</a></p>' +
     '</div>';
   }
 
   function statusMeta(status) {
     switch (status) {
-      case STATUS.SUSPENDED:           return { cls: "is-suspended", label: "SUSPENDED", icon: "x-octagon" };
+      case STATUS.SUSPENDED:           return { cls: "is-suspended", label: "SUSPENDED · WALANG PASOK", icon: "x-octagon" };
       case STATUS.PARTIALLY_AFFECTED:  return { cls: "is-partial", label: "PARTIALLY AFFECTED", icon: "alert-triangle" };
       case STATUS.PENDING:             return { cls: "is-pending", label: "SCHEDULED", icon: "calendar-clock" };
       case STATUS.UNKNOWN:             return { cls: "is-unknown", label: "UNAVAILABLE", icon: "help-circle" };
       default:                         return { cls: "is-clear", label: "NO SUSPENSION", icon: "check-circle" };
     }
-  }
-  // Inline status pill for the high-density notice banner. Escapes its value.
-  function pill(text, cls) {
-    if (text == null || text === "") return "";
-    return '<span class="notice-tag ' + (cls || "tag-neutral") + '">' + esc(text) + '</span>';
-  }
-  var MODALITY_PILL = { FACE_TO_FACE: "Face-to-Face only", ONLINE: "Online only", ALL: "All classes" };
-  // "2026-08-17" → "Effective Aug 17". Falls back to the raw string.
-  function fmtEffective(d) {
-    var mm = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ""));
-    if (!mm) return d ? "Effective " + d : "";
-    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return "Effective " + months[+mm[2] - 1] + " " + (+mm[3]);
-  }
-  // Compact inline pill row replacing the old 8-box metadata grid.
-  function noticeTagsHTML(st) {
-    var tags = [];
-    if (st.scope) tags.push(pill(st.scope, "tag-scope"));
-    if (st.affectedLevel) tags.push(pill(st.affectedLevel, "tag-scope"));
-    if (st.period && st.period !== "UNKNOWN" && PERIOD_LABEL[st.period]) tags.push(pill(PERIOD_LABEL[st.period], "tag-time"));
-    if (st.modality && MODALITY_PILL[st.modality]) {
-      var mc = (st.modality === "FACE_TO_FACE" || st.modality === "ONLINE") ? "tag-modality" : "tag-neutral";
-      tags.push(pill(MODALITY_PILL[st.modality], mc));
-    }
-    if (st.effectiveDate) tags.push(pill(fmtEffective(st.effectiveDate), "tag-neutral"));
-    if (st.source) tags.push(pill(st.source, "tag-source"));
-    var joined = tags.join("");
-    return joined ? '<div class="notice-tags">' + joined + '</div>' : "";
-  }
-  // Split "Fundamentals of Programming (Laboratory)" → { name, type }.
-  function parseClassType(subject) {
-    var s = String(subject || "");
-    var m = s.match(/\(([^)]+)\)\s*$/);
-    var type = m ? m[1].trim() : "";
-    var name = m ? s.slice(0, m.index).trim() : s.trim();
-    return { name: name || s, type: type };
-  }
-  // Per-class status chip styling + label (matches evaluateClassStatus verdicts).
-  function clsChipMeta(v) {
-    if (v === "SUSPENDED") return { cls: "is-suspended", label: "Suspended" };
-    if (v === "ONLINE_ONLY") return { cls: "is-online", label: "Online only" };
-    return { cls: "is-clear", label: "Proceeds" };
   }
   // Live render-time timestamp (truthful — reflects when the panel was drawn).
   function fmtUpdated() {
@@ -678,29 +719,19 @@
       }).format(new Date());
     } catch (e) { return manilaToday(); }
   }
-
-  var PERIOD_LABEL = { MORNING: "Morning", AFTERNOON: "Afternoon", EVENING: "Evening", ALL_DAY: "Whole day", UNKNOWN: "Not specified", SPECIFIC_TIME: "Specific hours" };
-  var MODALITY_LABEL = { FACE_TO_FACE: "Face-to-face only", ONLINE: "Online only", ALL: "All classes" };
-
-  function classBreakdownHTML(classes) {
-    if (!classes || !classes.length) return "";
-    var cards = classes.map(function (c) {
-      var chip = clsChipMeta(c.verdict);
-      var pt = parseClassType(c.subject);
-      var timeRange = fmtClock(c.start) + "–" + fmtClock(c.end);
-      return '<div class="cls-card ' + chip.cls + '">' +
-        '<div class="cls-top">' +
-          '<span class="cls-time">' + esc(timeRange) + '</span>' +
-          '<span class="cls-chip ' + chip.cls + '">' + esc(chip.label) + '</span>' +
-        '</div>' +
-        '<div class="cls-body">' +
-          '<span class="cls-name">' + esc(pt.name) + '</span>' +
-          (pt.type ? '<span class="cls-type">' + esc(pt.type) + '</span>' : '') +
-        '</div>' +
-        (c.note ? '<p class="cls-note">' + esc(c.note) + '</p>' : '') +
-      '</div>';
-    }).join("");
-    return '<div class="notice-classes"><p class="notice-classes-h">Your classes today</p><div class="cls-list">' + cards + '</div></div>';
+  // Date-only stamp (no fabricated time) for announcement "Posted …" lines.
+  // A bare YYYY-MM-DD is formatted from its own parts so no timezone can shift
+  // the calendar day; full ISO strings / Date objects fall through to Manila.
+  var MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function fmtStamp(d) {
+    if (!d) return "";
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d));
+    if (m) return MONTH_ABBR[(+m[2]) - 1] + " " + (+m[3]) + ", " + m[1];
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric"
+      }).format(new Date(d));
+    } catch (e) { return String(d); }
   }
 
   function officialLinksHTML() {
@@ -709,13 +740,48 @@
     }).join('<span class="notice-link-sep">·</span>');
   }
 
-  // Official-notice card: color-coded accent bar, high-density inline pill
-  // banner, per-class breakdown, live "Last updated" line, and source links.
-  function suspensionNoticeHTML(st) {
+  // Concise tag chips extracted from active/pending notice metadata.
+  function feedTags(st) {
+    var tags = [];
+    if (st.affectedLevel && st.affectedLevel !== "Not specified") tags.push(String(st.affectedLevel).toUpperCase());
+    if (st.modality === "FACE_TO_FACE") tags.push("FACE-TO-FACE ONLY");
+    if (st.levels && st.levels.allK12) tags.push("PUBLIC & PRIVATE");
+    return tags;
+  }
+
+  // Announcement FEED card — driven entirely by feed-presence semantics.
+  // NEVER fabricates:
+  //   • active/pending suspension → official title + "Posted …" + tags + CTA
+  //   • feed present, nothing active → truthful NO ACTIVE SUSPENSION ANNOUNCED
+  //   • feed failure (UNKNOWN)     → honest Monitoring note, never "may pasok"
+  function announcementFeedHTML(st) {
     var m = statusMeta(st.status);
-    var reasonTxt = st.reason && st.status !== STATUS.NOT_SUSPENDED
-      ? '<p class="notice-reason"><i data-lucide="info"></i>' + esc(st.reason) + '</p>' : "";
-    var body =
+    var hasNotice = (st.status === STATUS.SUSPENDED || st.status === STATUS.PARTIALLY_AFFECTED || st.status === STATUS.PENDING);
+    var body;
+    if (hasNotice && st.title) {
+      var tags = feedTags(st);
+      var tagHtml = tags.length
+        ? '<div class="feed-tags">' + tags.map(function (t) { return '<span class="feed-tag">' + esc(t) + '</span>'; }).join("") + '</div>'
+        : '';
+      var stampSrc = st.publishedAt || st.effectiveDate;
+      body =
+        (st.headline ? '<p class="notice-headline">' + esc(st.headline) + '</p>' : '') +
+        '<p class="feed-title">' + esc(st.title) + '</p>' +
+        (stampSrc ? '<p class="feed-time"><i data-lucide="clock"></i>Posted ' + esc(fmtStamp(stampSrc)) + '</p>' : '') +
+        (st.reason ? '<p class="notice-note">' + esc(st.reason) + '</p>' : '') +
+        tagHtml +
+        (st.sourceUrl ? '<a class="feed-cta" href="' + esc(st.sourceUrl) + '" target="_blank" rel="noopener">View Official Announcement<i data-lucide="external-link"></i></a>' : '');
+    } else if (st.status === STATUS.UNKNOWN) {
+      body =
+        '<p class="notice-headline">Awaiting official confirmation</p>' +
+        (st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '');
+    } else {
+      // NOT_SUSPENDED — the feed loaded and nothing active covers QCU today.
+      body =
+        '<p class="feed-empty">NO ACTIVE SUSPENSION ANNOUNCED</p>' +
+        (st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '');
+    }
+    return '' +
       '<div class="notice ' + m.cls + '">' +
         '<div class="notice-bar" aria-hidden="true"></div>' +
         '<div class="notice-main">' +
@@ -723,31 +789,13 @@
             '<span class="notice-kicker">Class Suspension Notice</span>' +
             '<span class="notice-status"><i data-lucide="' + m.icon + '"></i>' + m.label + '</span>' +
           '</div>' +
-          (st.headline ? '<p class="notice-headline">' + esc(st.headline) + '</p>' : '') +
-          noticeTagsHTML(st) +
-          (st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '') +
-          reasonTxt +
-          (st.confidence && st.status !== STATUS.NOT_SUSPENDED ? '<p class="notice-conf"><span class="notice-conf-dot" aria-hidden="true"></span>Confidence: ' + esc(st.confidence) + '</p>' : '') +
-          classBreakdownHTML(st.classes) +
+          body +
           '<div class="notice-foot">' +
-            '<span class="notice-updated"><i data-lucide="refresh-cw"></i>Last updated: ' + esc(fmtUpdated()) + '</span>' +
+            '<span class="notice-updated"><i data-lucide="refresh-cw"></i>Updated ' + esc(fmtUpdated()) + '</span>' +
             '<div class="notice-links">Verify: ' + officialLinksHTML() + '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
-    return body;
-  }
-
-  // Small SECONDARY advisory row. Weather NEVER overrides official status.
-  function weatherRiskRowHTML(risk, status) {
-    if (!risk || risk === "LOW") return "";
-    // Only surface advisory when there is no official suspension in effect.
-    if (status === STATUS.SUSPENDED || status === STATUS.PARTIALLY_AFFECTED) return "";
-    var cls = risk === "SEVERE" ? "is-suspended" : risk === "HIGH" ? "is-partial" : "is-pending";
-    return '<div class="wx-risk-row ' + cls + '">' +
-      '<span class="wx-risk-bar" aria-hidden="true"></span>' +
-      '<span class="wx-risk-body"><strong>Weather-based risk: ' + esc(risk) + '</strong> — not an official announcement. ' +
-      'Monitor the links above; only an official notice suspends classes.</span></div>';
   }
 
   /* =============================================================
@@ -755,30 +803,156 @@
      ============================================================= */
   function paint(html) { root.innerHTML = html; iconify(); }
 
-  function compose(wx, st, flood) {
+  // Geolocation UI state, held in the IIFE closure so it SURVIVES the
+  // paint()-driven innerHTML replacement between renders.
+  var geoState = "idle"; // idle | requesting | denied | error | unsupported
+
+  // Full-width overall status banner — ALWAYS visible. Every engine status maps
+  // to an honest label; UNKNOWN never reads as a normal/clear day.
+  function overallBannerHTML(st) {
+    var map = {};
+    map[STATUS.SUSPENDED]          = { cls: "is-suspended", icon: "x-octagon",      badge: "WALANG PASOK",       text: "Face-to-Face Classes Suspended" };
+    map[STATUS.PARTIALLY_AFFECTED] = { cls: "is-partial",   icon: "alert-triangle", badge: "PARTIALLY AFFECTED", text: "Some Classes Affected Today" };
+    map[STATUS.NOT_SUSPENDED]      = { cls: "is-normal",    icon: "check-circle",   badge: "NORMAL OPERATIONS",  text: "No class suspension in effect" };
+    map[STATUS.PENDING]            = { cls: "is-pending",   icon: "calendar-clock", badge: "SCHEDULED",          text: "Suspension announced" + (st.effectiveDate ? " for " + fmtStamp(st.effectiveDate) : "") };
+    map[STATUS.UNKNOWN]            = { cls: "is-unknown",   icon: "help-circle",    badge: "STATUS UNAVAILABLE", text: "Monitoring — verify with official channels" };
+    var b = map[st.status] || map[STATUS.UNKNOWN];
+    return '<div class="status-banner ' + b.cls + '" role="alert">' +
+      '<i data-lucide="' + b.icon + '" aria-hidden="true"></i>' +
+      '<span class="status-banner-body">' +
+        '<span class="status-banner-badge">' + esc(b.badge) + '</span>' +
+        '<span class="status-banner-text">' + esc(b.text) + '</span>' +
+      '</span>' +
+    '</div>';
+  }
+
+  // Campus-specific rain alert — shown only when genuine rain/showers/storm is
+  // detected AT QCU San Bartolome (WMO severity ≥ 3, so drizzle never alarms).
+  function campusRainAlertHTML(campusWx) {
+    if (!campusWx || campusWx.code == null) return "";
+    var sev = wmo(campusWx.code)[2];
+    if (sev < 3) return "";
+    var label = weatherStatusLabel(campusWx.code, campusWx.pop);
+    return '<div class="campus-rain-alert' + (sev >= 4 ? " sev-severe" : "") + '" role="status">' +
+      '<i data-lucide="cloud-rain" aria-hidden="true"></i>' +
+      '<span>Rain reported at QCU San Bartolome — ' + esc(label) + '.</span>' +
+    '</div>';
+  }
+
+  // My-Location card body when there is no cached GPS fix — branches on geoState.
+  function geoBodyHTML(state) {
+    if (state === "unsupported")
+      return '<div class="loc-off"><i data-lucide="map-pin-off"></i><span>Location unavailable on this device.</span></div>';
+    if (state === "requesting")
+      return '<div class="loc-enable"><button class="loc-enable-btn" type="button" disabled><i data-lucide="loader"></i>Locating…</button></div>';
+    if (state === "denied" || state === "error")
+      return '<div class="loc-enable">' +
+        '<p class="loc-off-msg"><i data-lucide="map-pin-off"></i>Location off — tap to enable.</p>' +
+        '<button class="loc-enable-btn" type="button" data-action="use-location"><i data-lucide="navigation"></i>Use my location</button></div>';
+    // idle
+    return '<div class="loc-enable">' +
+      '<p class="loc-hint">See live weather &amp; flood for where you are.</p>' +
+      '<button class="loc-enable-btn" type="button" data-action="use-location"><i data-lucide="navigation"></i>Use my location</button></div>';
+  }
+
+  // One dual-location micro-card. `opts.geo` renders the geolocation body (My
+  // Location, no fix); otherwise the weather segment + flood advisory.
+  function microCardHTML(title, sub, view, opts) {
+    opts = opts || {};
+    var sevClass = "", inner;
+    if (opts.geo) {
+      inner = geoBodyHTML(opts.geoState);
+    } else {
+      var seg = weatherSegmentHTML(view && view.wx);
+      sevClass = seg.sevClass;
+      inner = seg.html + floodBlockHTML(view && view.flood);
+    }
+    return '<div class="wx-panel loc-card ' + sevClass + '">' +
+      '<div class="loc-card-head">' +
+        '<span class="loc-title"><i data-lucide="' + esc(opts.icon || "map-pin") + '"></i>' + esc(title) + '</span>' +
+        (sub ? '<span class="loc-sub">' + esc(sub) + '</span>' : '') +
+      '</div>' +
+      inner +
+    '</div>';
+  }
+
+  function locationsGridHTML(views) {
+    var myCard = views.hasUserFix
+      ? microCardHTML("My Location", null, views.user, { icon: "navigation" })
+      : microCardHTML("My Location", null, null, { geo: true, geoState: geoState, icon: "navigation" });
+    var campusCard = microCardHTML("QCU Campus", "San Bartolome", views.campus, { icon: "school" });
+    return '<div class="loc-grid">' + myCard + campusCard + '</div>';
+  }
+
+  function compose(st, views) {
     return '' +
       '<div class="status-head">' +
         '<span class="home-kicker">Today in ' + esc(CFG.place) + '</span>' +
         '<span class="status-date">' + esc(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "short", day: "numeric" }).format(new Date())) + '</span>' +
       '</div>' +
+      overallBannerHTML(st) +
+      campusRainAlertHTML(views.campus && views.campus.wx) +
       '<div class="status-grid">' +
-        weatherBlockHTML(wx, flood) +
-        suspensionNoticeHTML(st) +
-      '</div>' +
-      weatherRiskRowHTML(st.weatherRisk, st.status);
+        locationsGridHTML(views) +
+        announcementFeedHTML(st) +
+      '</div>';
   }
 
+  // Per-location view: weather + derived flood + advisory risk. Kept isolated so
+  // one location's outage never blanks the other card.
+  function buildLocationView(wx, floodApi) {
+    return {
+      wx: wx || null,
+      flood: deriveFlood(wx, floodApi),
+      risk: wx ? computeRisk(wx.code, wx.pop) : null
+    };
+  }
+
+  // On-demand geolocation — fires ONLY from a user tap (never auto-prompts).
+  function requestUserLocation() {
+    if (!navigator.geolocation) { geoState = "unsupported"; refresh(); return; }
+    geoState = "requesting"; refresh();
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      try {
+        localStorage.setItem(LOC_KEY, JSON.stringify({
+          lat: pos.coords.latitude, lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy, t: Date.now()
+        }));
+      } catch (e) { /* storage may be unavailable — fall through to refresh */ }
+      geoState = "idle"; refresh();
+    }, function (err) {
+      geoState = (err && err.code === 1) ? "denied" : "error"; refresh();
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }
+
+  // ONE delegated handler on the root (root.innerHTML is replaced every paint).
+  root.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest && e.target.closest("[data-action='use-location']");
+    if (btn) { e.preventDefault(); requestUserLocation(); }
+  });
+
   function refresh() {
-    Promise.all([fetchWeather(), fetchSuspensions(), fetchSchedule(), fetchFlood()]).then(function (res) {
-      var wx = res[0], list = res[1], schedule = res[2], flood = res[3];
-      var risk = wx ? computeRisk(wx.code, wx.pop) : null;
-      var st = getQcuSuspensionStatus(list, schedule, risk);
-      paint(compose(wx, st, flood));
+    var userLoc = getUserLocation();               // cached fix only — no auto-prompt
+    var hasUserFix = !!userLoc;
+    var campusLoc = { lat: CFG.lat, lon: CFG.lon };
+    Promise.all([
+      fetchWeather(campusLoc), fetchFlood(campusLoc),                       // campus: always
+      fetchSuspensions(), fetchSchedule(),                                  // location-independent
+      hasUserFix ? fetchWeather(userLoc) : Promise.resolve(null),           // user: only with a fix
+      hasUserFix ? fetchFlood(userLoc)   : Promise.resolve(undefined)
+    ]).then(function (res) {
+      var campus = buildLocationView(res[0], res[1]);
+      var list = res[2], schedule = res[3];
+      var user = hasUserFix ? buildLocationView(res[4], res[5]) : null;
+      // Institution-centric: campus weather is the advisory input (advisory only —
+      // it can never flip the official status).
+      var st = getQcuSuspensionStatus(list, schedule, campus.risk);
+      paint(compose(st, { user: user, campus: campus, hasUserFix: hasUserFix }));
     }).catch(function (e) {
       dbg("refresh error", e);
-      // Even total failure must not read as "no suspension" / "no flood risk".
+      // Even total failure must read as honest UNKNOWN — never "no suspension".
       var st = getQcuSuspensionStatus(undefined, [], null);
-      paint(compose(null, st, undefined));
+      paint(compose(st, { user: null, campus: { wx: null, flood: undefined, risk: null }, hasUserFix: hasUserFix }));
     });
   }
 

@@ -1473,7 +1473,25 @@ async function init() {
   });
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    // Remember whether a worker was already in control BEFORE we register.
+    // On a first-ever visit there is no controller, so the controllerchange
+    // that clients.claim() fires is expected and must NOT trigger a reload.
+    var hadController = !!navigator.serviceWorker.controller;
+
+    navigator.serviceWorker.register("service-worker.js").then(function (reg) {
+      // Ask the browser to re-check service-worker.js on every load so a new
+      // deploy (bumped CACHE_NAME) is picked up without closing all tabs.
+      reg.update();
+    }).catch(function () {});
+
+    // When a new worker takes over an already-controlled page, reload once so
+    // the tab runs the freshly-fetched HTML/JS instead of the old worker's copy.
+    var swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (swReloaded || !hadController) return;
+      swReloaded = true;
+      window.location.reload();
+    });
   }
 
   iconify();

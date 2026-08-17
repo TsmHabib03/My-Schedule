@@ -492,6 +492,15 @@ function handlePositionUpdate(position, isFreshFix = false) {
 
   lastCoords = currentCoords;
 
+  // Persist the fix so other pages (Home weather + flood advisory) can center
+  // on the user's real location instead of the hardcoded campus coordinate.
+  // Reuses the permission already granted here — no second prompt on Home.
+  try {
+    localStorage.setItem("qcu:user-location", JSON.stringify({
+      lat: latitude, lon: longitude, accuracy: accuracy, t: timestamp
+    }));
+  } catch (e) { /* storage unavailable — non-fatal */ }
+
   if (isFreshFix || distanceMoved > ROUTE_DEBOUNCE_METERS) {
     fetchRoute(currentCoords, isFreshFix);
   } else {
