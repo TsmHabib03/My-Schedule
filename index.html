@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=19">
+<link rel="stylesheet" href="assets/css/styles.css?v=24">
 </head>
 <body data-page="home">
   <div class="app-shell">
@@ -48,6 +48,9 @@
           <img src="assets/images/cropped-logo.jpg" alt="">
         </div>
       </section>
+
+      <!-- 1b. Today in Quezon City — weather + class suspension -->
+      <section id="home-status" class="portal-card home-status-card" aria-label="Today's weather and class suspension status"></section>
 
       <!-- 2. Weekly Overview -->
       <section class="home-week">
@@ -93,6 +96,12 @@
   </div>
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-<script src="assets/js/app.js?v=19"></script>
+<script src="assets/js/app.js?v=24"></script>
+  <script>
+    // Optional overrides for the Home status panel (all keyless/optional).
+    // Open-Meteo needs NO API key, so nothing sensitive is ever hardcoded here.
+    window.QCU_STATUS_CONFIG = {};
+  </script>
+  <script src="assets/js/status.js?v=24"></script>
 </body>
 </html>

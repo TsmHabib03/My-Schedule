@@ -31,6 +31,8 @@ const ROUTE_DEBOUNCE_METERS = 80; // Recalculate route if user moved > 80m
 let scheduleData = null;
 let lastETAMinutes = null;
 let lastRouteData = null; // Store full route response for traffic details
+let lastUpdatedAt = null; // Date of the most recent successful route render
+let refreshTimer = null;  // Interval id for background traffic refresh
 
 /**
  * Load student schedule from data/schedule.json
@@ -96,45 +98,20 @@ function getNextClass(date) {
 }
 
 /**
- * Time-of-day traffic multiplier heuristic.
- * Returns { multiplier, label } for the given hour and day-of-week.
+ * Configurable tuning for ETA display and next-class verdict thresholds.
+ * Buffers are minutes of margin between estimated arrival and class start.
  *
- * Rationale: OSRM demo server provides base routing only — no real-time traffic.
- * These multipliers are calibrated for Quirino Highway / Novaliches corridors
- * during Philippine commuter patterns (M-F school/work rush).
+ * Honesty policy: we NEVER fabricate a live-traffic figure. Real traffic
+ * comes only from TomTom (free-flow vs traffic-aware durations). When only
+ * base routing (OSRM) or a straight-line estimate is available, traffic is
+ * reported as UNAVAILABLE — we do not invent a delay multiplier.
  */
-function getTrafficInfo(date) {
-  const hour = date.getHours();
-  const minute = date.getMinutes();
-  const time = hour + minute / 60;
-  const dow = date.getDay(); // 0=Sun, 6=Sat
-  const isWeekday = dow >= 1 && dow <= 5;
-
-  // Morning commute rush (school + work): 7:00 – 9:30
-  if (time >= 7 && time < 9.5 && isWeekday) {
-    if (time < 8) return { multiplier: 1.25, label: 'Moderate', level: 'moderate' };
-    return { multiplier: 1.35, label: 'Heavy', level: 'heavy' };
-  }
-
-  // Evening commute rush: 17:00 – 19:30
-  if (time >= 17 && time < 19.5 && isWeekday) {
-    if (time < 18.5) return { multiplier: 1.35, label: 'Heavy', level: 'heavy' };
-    return { multiplier: 1.25, label: 'Moderate', level: 'moderate' };
-  }
-
-  // Midday activity: 11:00 – 14:00
-  if (time >= 11 && time < 14) {
-    return { multiplier: 1.10, label: 'Light', level: 'light' };
-  }
-
-  // Late night / early morning / weekends evening
-  if (time >= 21 || time < 6) {
-    return { multiplier: 1.0, label: 'Clear', level: 'clear' };
-  }
-
-  // Default: normal
-  return { multiplier: 1.0, label: 'Normal', level: 'normal' };
-}
+const ETA_TUNING = {
+  onTimeBufferMin: 15,   // arrival ≥ 15 min before start → ON TIME
+  tightBufferMin: 5,     // arrival ≥ 5 min before start  → TIGHT
+  // 0 ≤ margin < tightBufferMin → AT RISK ; margin < 0 → LATE
+  periodicRefreshMs: 90000 // background traffic refresh cadence while tracking (not per-second)
+};
 
 /**
  * Generates a 32-point geodesic circle polygon in GeoJSON format.
@@ -527,11 +504,19 @@ function handlePositionUpdate(position, isFreshFix = false) {
  */
 function handlePositionError(error) {
   console.warn("Geolocation error:", error);
-  let message = "GPS signal error";
-  if (error.code === 1) message = "Location access denied";
-  else if (error.code === 2) message = "Location unavailable";
-  else if (error.code === 3) message = "Location fix timeout";
 
+  if (error.code === 1) {
+    // Permission denied — stop watching to avoid repeated prompts, and guide the user.
+    stopTracking();
+    updateStatus("Location access denied — allow location, then tap “Locate Me”", "error");
+    const el = document.getElementById('eta-updated');
+    if (el) el.textContent = 'Enable location in your browser/site settings, then retry.';
+    return;
+  }
+
+  let message = "GPS signal error";
+  if (error.code === 2) message = "Location unavailable — check GPS/network";
+  else if (error.code === 3) message = "Location fix timed out — retrying…";
   updateStatus(message, "error");
 }
 
@@ -590,6 +575,14 @@ function startTracking() {
     (err) => handlePositionError(err),
     geoOptions
   );
+
+  // Background refresh so live traffic stays current even while stationary.
+  // Reasonable cadence (not per-second); force=true bypasses the move throttle.
+  if (refreshTimer === null) {
+    refreshTimer = setInterval(() => {
+      if (isTracking && lastCoords) fetchRoute(lastCoords, true);
+    }, ETA_TUNING.periodicRefreshMs);
+  }
 }
 
 /**
@@ -600,11 +593,18 @@ function stopTracking() {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
 }
 
 /**
- * Classify traffic level from delay ratio
- * @param {number} delayRatio - trafficDuration / staticDuration
+ * Classify real traffic level from the ratio of traffic-aware to free-flow time.
+ * Canonical states: CLEAR / NORMAL / MODERATE / HEAVY / SEVERE.
+ * Only ever called with genuine TomTom durations — never a heuristic.
+ * @param {number} staticMinutes  - free-flow travel time (traffic=false)
+ * @param {number} trafficMinutes - traffic-aware travel time (traffic=true)
  * @returns {object} { label, level, delayMinutes }
  */
 function classifyTraffic(staticMinutes, trafficMinutes) {
@@ -612,20 +612,20 @@ function classifyTraffic(staticMinutes, trafficMinutes) {
   const delayRatio = staticMinutes > 0 ? trafficMinutes / staticMinutes : 1;
 
   let label, level;
-  if (delayRatio <= 1.1) {
-    label = 'Normal';
+  if (delayRatio <= 1.05) {
+    label = 'CLEAR';
+    level = 'clear';
+  } else if (delayRatio <= 1.2) {
+    label = 'NORMAL';
     level = 'normal';
-  } else if (delayRatio <= 1.25) {
-    label = 'Light';
-    level = 'light';
   } else if (delayRatio <= 1.5) {
-    label = 'Moderate';
+    label = 'MODERATE';
     level = 'moderate';
   } else if (delayRatio <= 2.0) {
-    label = 'Heavy';
+    label = 'HEAVY';
     level = 'heavy';
   } else {
-    label = 'Severe';
+    label = 'SEVERE';
     level = 'severe';
   }
 
@@ -708,18 +708,17 @@ async function fetchRoute(userCoords, force = false) {
     const trafficMins = Math.max(1, Math.ceil(trafficRoute.summary.travelTimeInSeconds / 60));
     const km = (trafficRoute.summary.lengthInMeters / 1000).toFixed(1);
 
-    // Classify traffic from actual delay
+    // Real, measured traffic delay — safe to classify and label "Live"
     const trafficInfo = classifyTraffic(staticMins, trafficMins);
-    lastETAMinutes = trafficMins;
-    lastRouteData = { staticMins, trafficMins, km, trafficInfo, trafficRoute };
 
-    document.getElementById('eta-val-time').textContent = `${trafficMins} min`;
-    document.getElementById('eta-val-dist').textContent = `${km} km`;
-    document.getElementById('eta-val-status').textContent = `${trafficInfo.label} · Live`;
-
-    updateArrivalTime(trafficMins);
-    updateClassStatus(trafficMins, trafficInfo);
-    updateStatsPanel(staticMins, trafficMins, trafficInfo);
+    renderRoute({
+      normalMins: staticMins,
+      currentMins: trafficMins,
+      km,
+      trafficInfo,
+      hasLiveTraffic: true,
+      trafficRoute
+    });
     updateStatus("GPS tracking active — live traffic", "success");
 
   } catch (err) {
@@ -765,21 +764,18 @@ async function fetchRouteOSRM(userCoords, force = false) {
       const baseMins = Math.max(1, Math.ceil(route.duration / 60));
       const km = (route.distance / 1000).toFixed(1);
 
-      // Apply time-of-day heuristic as last resort
-      const nowDate = new Date();
-      const traffic = getTrafficInfo(nowDate);
-      const adjustedMins = Math.max(1, Math.ceil(baseMins * traffic.multiplier));
-      lastETAMinutes = adjustedMins;
-      lastRouteData = { staticMins: baseMins, trafficMins: adjustedMins, km, trafficInfo: { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins }, trafficRoute: null };
-
-      document.getElementById('eta-val-time').textContent = `${adjustedMins} min`;
-      document.getElementById('eta-val-dist').textContent = `${km} km`;
-      document.getElementById('eta-val-status').textContent = `${traffic.label} · Time-of-day estimate`;
-
-      updateArrivalTime(adjustedMins);
-      updateClassStatus(adjustedMins, { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins });
-      updateStatsPanel(baseMins, adjustedMins, { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins });
-      updateStatus("Routing active (time-of-day estimate)", "active");
+      // OSRM demo server has NO live-traffic feed. We report the base road
+      // estimate honestly and mark traffic UNAVAILABLE — we never invent a
+      // delay multiplier and present it as real traffic.
+      renderRoute({
+        normalMins: baseMins,
+        currentMins: baseMins,
+        km,
+        trafficInfo: null,
+        hasLiveTraffic: false,
+        trafficRoute: null
+      });
+      updateStatus("Routing active — traffic data unavailable", "active");
     } else {
       throw new Error("No driving route found");
     }
@@ -791,7 +787,7 @@ async function fetchRouteOSRM(userCoords, force = false) {
 
 /**
  * Fallback straight-line estimation if both TomTom and OSRM are offline.
- * Applies time-of-day heuristic for schedule comparison.
+ * Reports an approximate distance-based ETA with traffic UNAVAILABLE.
  */
 function fallbackETA(userCoords) {
   if (map && map.getSource('route')) {
@@ -810,21 +806,17 @@ function fallbackETA(userCoords) {
   const avgTransitSpeedKmh = 35;
   const baseMins = Math.max(1, Math.ceil((distMeters / 1000 / avgTransitSpeedKmh) * 60));
 
-  // Apply time-of-day heuristic
-  const nowDate = new Date();
-  const traffic = getTrafficInfo(nowDate);
-  const adjustedMins = Math.max(1, Math.ceil(baseMins * traffic.multiplier));
-  lastETAMinutes = adjustedMins;
-  lastRouteData = { staticMins: baseMins, trafficMins: adjustedMins, km, trafficInfo: { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins }, trafficRoute: null };
-
-  document.getElementById('eta-val-time').textContent = `~${adjustedMins} min`;
-  document.getElementById('eta-val-dist').textContent = `${km} km`;
-  document.getElementById('eta-val-status').textContent = `Approx · ${traffic.label}`;
-
-  updateArrivalTime(adjustedMins);
-  updateClassStatus(adjustedMins, { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins });
-  updateStatsPanel(baseMins, adjustedMins, { label: traffic.label, level: traffic.level, delayMinutes: adjustedMins - baseMins });
-  updateStatus("Routing limited (approx)", "error");
+  // Straight-line only — no road network, no traffic. Clearly approximate.
+  renderRoute({
+    normalMins: baseMins,
+    currentMins: baseMins,
+    km,
+    trafficInfo: null,
+    hasLiveTraffic: false,
+    approx: true,
+    trafficRoute: null
+  });
+  updateStatus("Routing limited — approximate distance only", "error");
 
   if (!isUserPanning) {
     fitMapBounds(userCoords, false);
@@ -848,37 +840,95 @@ function updateArrivalTime(durationMins) {
 }
 
 /**
- * Update the stats panel with detailed traffic info
+ * Single source of truth for rendering a computed route into the UI.
+ * Accepts a normalized route object so every routing source (TomTom / OSRM /
+ * straight-line) renders identically and honestly.
+ * @param {object} r
+ *   normalMins {number}  free-flow / base travel time
+ *   currentMins {number} traffic-aware time (== normalMins when no live traffic)
+ *   km {string}          distance
+ *   trafficInfo {object|null} { label, level, delayMinutes } — only when real
+ *   hasLiveTraffic {boolean}  true only for measured TomTom traffic
+ *   approx {boolean}     true for straight-line estimate (prefix "~")
  */
-function updateStatsPanel(staticMins, trafficMins, trafficInfo) {
-  const delay = trafficInfo.delayMinutes || 0;
-  
-  // Update Normal ETA
+function renderRoute(r) {
+  const { normalMins, currentMins, km, trafficInfo, hasLiveTraffic, approx } = r;
+  const prefix = approx ? '~' : '';
+
+  lastETAMinutes = currentMins;
+  lastUpdatedAt = new Date();
+  lastRouteData = r;
+
   const staticEl = document.getElementById('eta-val-static');
-  if (staticEl) staticEl.textContent = `${staticMins} min`;
-  
-  // Update Current ETA
+  if (staticEl) staticEl.textContent = `${prefix}${normalMins} min`;
+
   const timeEl = document.getElementById('eta-val-time');
-  if (timeEl) timeEl.textContent = `${trafficMins} min`;
-  
-  // Update Traffic stat box with detailed info
-  const trafficEl = document.getElementById('eta-val-status');
-  if (trafficEl) {
-    if (delay > 0) {
-      trafficEl.innerHTML = `${trafficInfo.label} · Live<br><span style="font-size:11px;font-weight:600;color:var(--muted);">+${delay} min delay</span>`;
-    } else {
-      trafficEl.textContent = `${trafficInfo.label} · Live`;
-    }
+  if (timeEl) timeEl.textContent = `${prefix}${currentMins} min`;
+
+  const distEl = document.getElementById('eta-val-dist');
+  if (distEl) distEl.textContent = `${km} km`;
+
+  // TRAFFIC — real state, or explicit "Unavailable"; never a fabricated "Live"
+  renderTrafficBox(hasLiveTraffic, trafficInfo);
+
+  updateArrivalTime(currentMins);
+  updateClassStatus(currentMins, trafficInfo, hasLiveTraffic);
+  renderUpdatedTime();
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+/**
+ * Render the Traffic stat box. Color lives ONLY on the small indicator dot —
+ * the box background/text stay neutral (institutional restraint).
+ */
+function renderTrafficBox(hasLiveTraffic, trafficInfo) {
+  const el = document.getElementById('eta-val-status');
+  if (!el) return;
+
+  el.classList.remove(
+    'traffic-clear', 'traffic-normal', 'traffic-moderate',
+    'traffic-heavy', 'traffic-severe', 'traffic-unavailable'
+  );
+
+  if (!hasLiveTraffic || !trafficInfo) {
+    el.classList.add('traffic-unavailable');
+    el.innerHTML = '<span class="traffic-ind"></span><span class="traffic-label">Unavailable</span>';
+    return;
   }
+
+  el.classList.add(`traffic-${trafficInfo.level}`);
+  const delay = trafficInfo.delayMinutes || 0;
+  const delayLine = delay > 0
+    ? `<span class="traffic-delay">+${delay} min delay</span>`
+    : '<span class="traffic-delay">No delay</span>';
+  el.innerHTML =
+    `<span class="traffic-ind"></span>` +
+    `<span class="traffic-label">${trafficInfo.label}</span>${delayLine}`;
+}
+
+/**
+ * Render the "Updated H:MM · source" line so the freshness of the estimate
+ * is always visible (no silent stale data).
+ */
+function renderUpdatedTime() {
+  const el = document.getElementById('eta-updated');
+  if (!el || !lastUpdatedAt) return;
+  const t = lastUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  let src = 'No live traffic';
+  if (lastRouteData && lastRouteData.hasLiveTraffic) src = 'Live traffic';
+  else if (lastRouteData && lastRouteData.approx) src = 'Approximate';
+  el.textContent = `Updated ${t} · ${src}`;
 }
 
 /**
  * Compare final ETA with next scheduled class and update the class status panel.
  * When the next class is on a different day, show info without the on-time comparison.
- * @param {number} etaMinutes - Traffic-adjusted ETA in minutes from now
- * @param {object} traffic - { label, level, delayMinutes } from classifyTraffic()
+ * @param {number} etaMinutes - ETA in minutes from now (traffic-aware when available)
+ * @param {object|null} traffic - { label, level, delayMinutes } when live traffic exists
+ * @param {boolean} hasLiveTraffic - whether `traffic` reflects measured live conditions
  */
-function updateClassStatus(etaMinutes, traffic) {
+function updateClassStatus(etaMinutes, traffic, hasLiveTraffic) {
   const banner = document.getElementById('eta-class-banner');
   const noclass = document.getElementById('eta-noclass-banner');
   if (!banner || !noclass) return;
@@ -914,12 +964,18 @@ function updateClassStatus(etaMinutes, traffic) {
   document.getElementById('eta-class-location').textContent = `${nextClass.room || '—'} · ${nextClass.building || '—'}`;
   document.getElementById('eta-class-arrival').textContent = `Est. arrival: ${arrivalTimeStr}`;
 
-  // Traffic source note
+  // Traffic source note — honest about whether traffic is live or unavailable
   const trafficEl = document.getElementById('eta-class-traffic');
   if (trafficEl) {
-    const sourceLabel = traffic.level && traffic.level !== 'normal' ? 'Live' : 'Time-of-day estimate';
-    const delayText = traffic.delayMinutes && traffic.delayMinutes > 0 ? `<span class="traffic-source">+${traffic.delayMinutes} min delay · Quirino Highway</span>` : `<span class="traffic-source">Quirino Highway</span>`;
-    trafficEl.innerHTML = `${traffic.label} · ${sourceLabel}<br>${delayText}`;
+    if (hasLiveTraffic && traffic) {
+      const delay = traffic.delayMinutes || 0;
+      const delayText = delay > 0
+        ? `<span class="traffic-source">+${delay} min delay · via Quirino Highway</span>`
+        : `<span class="traffic-source">No delay · via Quirino Highway</span>`;
+      trafficEl.innerHTML = `${traffic.label} · Live traffic<br>${delayText}`;
+    } else {
+      trafficEl.innerHTML = `Traffic data unavailable<br><span class="traffic-source">Estimate via Quirino Highway</span>`;
+    }
     if (window.lucide) window.lucide.createIcons();
   }
 
@@ -929,30 +985,36 @@ function updateClassStatus(etaMinutes, traffic) {
   const margin = document.getElementById('eta-class-margin');
   const statusBox = document.getElementById('eta-class-status-box');
 
-  // Clear previous state
-  statusBox.classList.remove('eta-status-ok', 'eta-status-tight', 'eta-status-late');
+  // Clear previous verdict state (4 possible tones)
+  statusBox.classList.remove('eta-status-ok', 'eta-status-tight', 'eta-status-risk', 'eta-status-late');
 
   if (isClassToday) {
     const classStartMinutes = timeToMinutes(nextClass.start);
-    const diffMinutes = classStartMinutes - arrivalMinutes;
+    const diffMinutes = classStartMinutes - arrivalMinutes; // margin before class start
 
-    if (diffMinutes >= 10) {
-      // On Time — comfortable buffer
+    if (diffMinutes >= ETA_TUNING.onTimeBufferMin) {
+      // Comfortable margin
       statusBox.classList.add('eta-status-ok');
       dot.innerHTML = '<i data-lucide="check-circle-2" style="width:14px;height:14px;"></i>';
       verdict.textContent = 'ON TIME';
       margin.textContent = `${diffMinutes} min before class`;
-    } else if (diffMinutes >= 0) {
-      // Tight Buffer — ≤10 min margin
+    } else if (diffMinutes >= ETA_TUNING.tightBufferMin) {
+      // Tight but should make it
       statusBox.classList.add('eta-status-tight');
       dot.innerHTML = '<i data-lucide="alert-triangle" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'TIGHT BUFFER';
-      margin.textContent = `Only ${diffMinutes} min buffer`;
+      verdict.textContent = 'TIGHT';
+      margin.textContent = `${diffMinutes} min buffer`;
+    } else if (diffMinutes >= 0) {
+      // Barely on time — any delay means late
+      statusBox.classList.add('eta-status-risk');
+      dot.innerHTML = '<i data-lucide="alert-circle" style="width:14px;height:14px;"></i>';
+      verdict.textContent = 'AT RISK';
+      margin.textContent = `Only ${diffMinutes} min to spare`;
     } else {
-      // Running Late — ETA after class start
+      // ETA is after class start
       statusBox.classList.add('eta-status-late');
       dot.innerHTML = '<i data-lucide="x-circle" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'RUNNING LATE';
+      verdict.textContent = 'LATE';
       margin.textContent = `${Math.abs(diffMinutes)} min after start`;
     }
   } else {

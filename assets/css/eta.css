@@ -307,14 +307,17 @@
   opacity: 0.7;
 }
 
-/* Status colours */
+/* Status colours — severity ladder: ON TIME → TIGHT → AT RISK → LATE */
 .eta-status-ok .eta-class-verdict { color: #1B5E20; }
 .eta-status-tight .eta-class-verdict { color: #E65100; }
+.eta-status-risk .eta-class-verdict { color: #BF360C; }
 .eta-status-late .eta-class-verdict { color: #B71C1C; }
+.eta-status-risk { background: rgba(255, 248, 240, 0.98); }
 .eta-status-late { background: rgba(255, 245, 245, 0.98); }
 
 .eta-status-ok .eta-class-margin { color: #1B5E20; }
 .eta-status-tight .eta-class-margin { color: #E65100; }
+.eta-status-risk .eta-class-margin { color: #BF360C; }
 .eta-status-late .eta-class-margin { color: #B71C1C; }
 
 /* Status box at bottom of panel */
@@ -442,6 +445,62 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+}
+
+/* ── Traffic stat indicator ──
+   Institutional restraint: colour lives ONLY on the small status dot.
+   The label + delay text stay neutral so no whole box reads as "alarmed". */
+.eta-stat-value.traffic-clear,
+.eta-stat-value.traffic-normal,
+.eta-stat-value.traffic-moderate,
+.eta-stat-value.traffic-heavy,
+.eta-stat-value.traffic-severe,
+.eta-stat-value.traffic-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+}
+
+.traffic-ind {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.traffic-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.traffic-delay {
+  flex-basis: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* The single place traffic colour is expressed */
+.traffic-clear .traffic-ind       { background: #2E7D32; }
+.traffic-normal .traffic-ind      { background: #2E7D32; }
+.traffic-moderate .traffic-ind    { background: #E65100; }
+.traffic-heavy .traffic-ind       { background: #C62828; }
+.traffic-severe .traffic-ind      { background: #B71C1C; }
+.traffic-unavailable .traffic-ind { background: #9AA0A6; }
+
+/* ── Freshness line: "Updated H:MM · source" ── */
+.eta-updated {
+  margin: 0;
+  padding: 2px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Actions ── */

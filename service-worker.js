@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v19";
+const CACHE_NAME = "qcu-schedule-v22";
 const STATIC_ASSETS = [
   "./",
   "index.html",
@@ -26,7 +26,8 @@ const STATIC_ASSETS = [
 
 // Data files that should NOT be cached (always fetch fresh)
 const NO_CACHE_PATHS = [
-  "data/schedule.json"
+  "data/schedule.json",
+  "data/flood.json"
 ];
 
 function isNoCachePath(url) {

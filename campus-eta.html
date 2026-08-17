@@ -20,8 +20,8 @@
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
   
   <!-- CSS -->
-  <link rel="stylesheet" href="assets/css/styles.css?v=19">
-  <link rel="stylesheet" href="assets/css/eta.css?v=19">
+  <link rel="stylesheet" href="assets/css/styles.css?v=24">
+  <link rel="stylesheet" href="assets/css/eta.css?v=24">
 </head>
 <body data-page="campus-eta">
   <div class="app-shell">
@@ -119,6 +119,9 @@
           </div>
         </div>
 
+        <!-- Freshness line — always shows when the estimate was last computed and its source -->
+        <p class="eta-updated" id="eta-updated" aria-live="polite"></p>
+
         <!-- Actions Toolbar -->
         <div class="eta-actions">
           <button class="btn btn-primary" id="btn-eta-locate" type="button" aria-label="Get fresh location and recenter">
@@ -149,8 +152,8 @@
       tomtomApiKey: '' // Set via build process or environment variable
     };
   </script>
-  <script src="assets/js/app.js?v=19"></script>
-  <script src="assets/js/eta.js?v=19"></script>
+  <script src="assets/js/app.js?v=24"></script>
+  <script src="assets/js/eta.js?v=24"></script>
   <script>
     init();
     initETA();

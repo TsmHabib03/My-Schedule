@@ -204,11 +204,10 @@ function orderedSchedule(now = new Date()) {
 function renderShell() {
   const navItems = [
     ["home",      "index.html",     "layout-dashboard", "Home"],
-    ["campus-eta", "campus-eta.html", "navigation",      "Campus ETA"],
-    
+    ["campus-eta", "campus-eta.html", "navigation",      "ETA"],
+
     ["tasks",     "tasks.html",     "check-square",     "Tasks"],
     ["notes",     "notes.html",     "sticky-note",      "Notes"],
-    ["buildings", "buildings.html", "building-2",       "Buildings"],
     ["settings",  "settings.html",  "settings",         "Settings"]
   ];
 
@@ -544,8 +543,8 @@ const trackerRoot = document.getElementById("home-tracker");
     }
   } else {
     if (trackerRoot) trackerRoot.classList.remove("home-tracker--empty");
-    if (nowEl) setInnerHTML(nowEl, trackerCellTemplate(current, "In session", "No class right now", "clock"));
-    if (nextEl) setInnerHTML(nextEl, trackerCellTemplate(next, "Coming up next",
+    if (nowEl) setInnerHTML(nowEl, trackerCellTemplate(current, "Now", "No class right now", "clock"));
+    if (nextEl) setInnerHTML(nextEl, trackerCellTemplate(next, "Up next",
       todaysClasses.length ? "No more classes today" : "No classes today", "coffee"));
   }
 
@@ -1220,8 +1219,7 @@ function noteCardTemplate(n) {
   const bodyPreview = (n.body || "").length > 140 ? (n.body || "").slice(0, 140) + "…" : (n.body || "");
 
   return `
-    <article class="note-card" data-note-id="${n.id}">
-      <div class="note-card-stripe" style="background:${sc.bg || 'var(--blue)'};"></div>
+    <article class="note-card" data-note-id="${n.id}" style="border-left:3px solid ${sc.border || 'var(--blue)'};">
       <div class="note-card-inner">
         <div class="note-card-header">
           <h3 class="note-card-title">${n.title || "Untitled note"}</h3>
