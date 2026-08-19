@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v29";
+const CACHE_NAME = "qcu-schedule-v40";
 const STATIC_ASSETS = [
   "./",
   "index.html",
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   "assets/css/eta.css",
   "assets/js/app.js",
   "assets/js/eta.js",
+  "assets/js/status.js",
   "assets/images/QCU college of computer studies logo.jpg",
   "assets/images/Quezon_City_Government.png",
   "assets/images/QCU-BUILDING-1024x683-1.jpg",
@@ -27,8 +28,11 @@ const STATIC_ASSETS = [
 // Data files that should NOT be cached (always fetch fresh)
 const NO_CACHE_PATHS = [
   "data/schedule.json",
+  "data/suspensions.json",
   "data/flood.json",
-  "/api/suspensions"
+  "/api/suspensions",
+  "/api/flood",
+  "/api/weather-alerts"
 ];
 
 function isNoCachePath(url) {
@@ -52,10 +56,12 @@ self.addEventListener("fetch", (event) => {
 
   const url = event.request.url;
 
-  // For schedule data: always fetch from network, never cache
+  // For schedule data: always fetch from network, never cache.
+  // { cache: "no-store" } forces the browser to bypass its own HTTP cache so
+  // we never revalidate against a stale copy.
   if (isNoCachePath(url)) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then(response => {
           if (!response.ok) throw new Error("Network response not ok");
           return response;
@@ -65,9 +71,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For static assets: network first, then cache
+  // For static assets: network first, then cache.
+  // { cache: "no-store" } is critical ???????? without it the SW's own fetch() reads
+  // from the browser HTTP cache and can return stale HTML/CSS/JS even while
+  // online, which then gets written into CACHE_NAME and served as "fresh".
+  // This was the bug behind needing Ctrl+Shift+R to see new deployments.
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-store" })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();

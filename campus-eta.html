@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#005BAC">
-  <meta name="description" content="Live Campus ETA for Quezon City University — real-time route and arrival estimates to San Bartolome Main Campus.">
+  <meta name="description" content="Live Campus ETA for Quezon City University ??? real-time route and arrival estimates to San Bartolome Main Campus.">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -20,8 +20,8 @@
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
   
   <!-- CSS -->
-  <link rel="stylesheet" href="assets/css/styles.css?v=29">
-  <link rel="stylesheet" href="assets/css/eta.css?v=29">
+  <link rel="stylesheet" href="assets/css/styles.css?v=40">
+  <link rel="stylesheet" href="assets/css/eta.css?v=39">
 </head>
 <body data-page="campus-eta">
   <div class="app-shell">
@@ -44,7 +44,7 @@
         </div>
         <div class="eta-alert-body" style="margin-top:8px;">
           <p class="eta-alert-title" id="eta-alert-title">
-            Location accuracy is low (<span id="eta-alert-radius">±1.5 km</span>)
+            Location accuracy is low (<span id="eta-alert-radius">??1.5 km</span>)
           </p>
           <p class="caption" id="eta-alert-desc" style="margin-top:4px; line-height:1.5;">
             Laptops without dedicated GPS hardware estimate location via Wi-Fi networks or your ISP gateway (which may resolve to another district such as Valenzuela). Enable Windows Location Services and connect to Wi-Fi for a more accurate fix.
@@ -59,13 +59,13 @@
           <div id="eta-map"></div>
           <div class="eta-status-strip" id="eta-status-strip">
             <span class="pulse-dot" id="eta-status-dot"></span>
-            <span id="eta-status-text">Acquiring device location…</span>
+            <span id="eta-status-text">Acquiring device location???</span>
           </div>
           <div class="eta-accuracy-badge" id="eta-accuracy-badge" style="display: none;">
             <span id="eta-accuracy-val">--</span>
           </div>
 
-          <!-- Floating Class Panel — inside map wrapper -->
+          <!-- Floating Class Panel ??? inside map wrapper -->
           <div class="eta-class-panel" id="eta-class-banner" style="display:none;">
             <div class="eta-class-panel-header">
               <p class="eta-class-panel-label">Next Class</p>
@@ -119,7 +119,7 @@
           </div>
         </div>
 
-        <!-- Freshness line — always shows when the estimate was last computed and its source -->
+        <!-- Freshness line ??? always shows when the estimate was last computed and its source -->
         <p class="eta-updated" id="eta-updated" aria-live="polite"></p>
 
         <!-- Actions Toolbar -->
@@ -152,8 +152,8 @@
       tomtomApiKey: '' // Set via build process or environment variable
     };
   </script>
-  <script src="assets/js/app.js?v=29"></script>
-  <script src="assets/js/eta.js?v=29"></script>
+  <script src="assets/js/app.js?v=39"></script>
+  <script src="assets/js/eta.js?v=39"></script>
   <script>
     init();
     initETA();

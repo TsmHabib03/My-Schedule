@@ -38,7 +38,12 @@
     suspFeed: "/api/suspensions",
     suspFeedFallback: "data/suspensions.json",
     scheduleFeed: "data/schedule.json",
-    floodFeed: "data/flood.json",
+    // Google Flood Forecasting API (the engine behind Google Flood Hub),
+    // proxied server-side at /api/flood. Key-gated (GOOGLE_FLOOD_KEY in the
+    // Pages dashboard); the proxy returns a non-OK status until configured,
+    // so the client falls back to the rainfall-derived estimate — never a
+    // fabricated "no flood risk".
+    floodFeed: "/api/flood",
     debug: false,
     /* Time windows (Asia/Manila, 24h "HH:MM") — single source of truth,
        no scattered magic numbers. Afternoon spans noon→6pm. */
@@ -165,7 +170,16 @@
   };
 
   // Broad multi-phrasing detector (English + Filipino), title AND body.
-  var SUSP_RE = /(walang\s+pasok|class(?:es)?\s+(?:are\s+)?suspend|suspension\s+of\s+class|no\s+class(?:es)?|cancellation\s+of\s+class|classes?\s+cancel|face-?to-?face\s+class(?:es)?\s+(?:are\s+)?suspend|suspend\w*\s+.{0,30}?class|walang\s+klase|holiday\s+for\s+all\s+school)/i;
+  // `suspen[ds]\w*` deliberately covers BOTH stems — the verb (suspend /
+  // suspended / suspends) and the noun (suspension / suspensions). Matching only
+  // "suspend" silently missed the way QC actually titles most notices
+  // ("Suspension of Afternoon Face-to-Face Classes", "Class Suspension"), which
+  // rendered a confident "no suspension" on days classes were in fact called
+  // off — the one failure this engine exists to prevent. The two generic
+  // alternatives read in both directions (suspension…class, class…suspension)
+  // and `[^.!?]` keeps a match inside a single sentence so unrelated
+  // announcements ("Suspension of Water Service …") do not trip it.
+  var SUSP_RE = /(walang\s+pasok|walang\s+klase|holiday\s+for\s+all\s+school|cancellation\s+of\s+class|classes?\s+cancel|no\s+class(?:es)?|suspen[ds]\w*\b[^.!?]{0,40}?\bclass|\bclass(?:es)?\b[^.!?]{0,25}?\bsuspen[ds])/i;
   function looksLikeSuspension(text) { return SUSP_RE.test(String(text || "")); }
 
   // Period → which window (in minutes) the suspension covers.
@@ -552,59 +566,58 @@
     }).then(function (j) { return Array.isArray(j) ? j : []; })
       .catch(function (e) { dbg("schedule fetch failed", e); return []; });
   }
-  // Live keyless flood signal from the Open-Meteo Flood API (river-discharge
-  // forecast, m³/s). Returns { discharge, dischargeTrend } or undefined on
-  // failure. Absolute flood RISK is derived separately from rainfall (see
-  // deriveFlood) — this only supplies the supporting river-flow trend. Never
-  // fabricates: a failed fetch returns undefined so the advisory reads
-  // "unavailable", not a false "no flood risk".
-  function fetchFlood(loc) {
-    loc = loc || { lat: CFG.lat, lon: CFG.lon };
-    var url = "https://flood-api.open-meteo.com/v1/flood?latitude=" + loc.lat +
-      "&longitude=" + loc.lon + "&daily=river_discharge&forecast_days=7";
-    return fetch(url).then(function (r) {
+  // Live flood signal from the Google Flood Forecasting API (the engine behind
+  // Google Flood Hub), proxied server-side at /api/flood. Returns a normalized
+  // object { provider:"google", severity, trend, issuedAt, gaugeId, km, source,
+  // sourceUrl } — or undefined when Google is unavailable (no key configured /
+  // empty / upstream error / network failure). A failed fetch NEVER fabricates:
+  // deriveFlood then falls back to the honest rainfall-derived estimate.
+  function fetchFlood() {
+    return fetch(CFG.floodFeed, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("flood HTTP " + r.status);
       return r.json();
     }).then(function (j) {
-      var d = j && j.daily && j.daily.river_discharge;
-      if (!Array.isArray(d) || d.length === 0) return undefined;
-      var today = (typeof d[0] === "number") ? d[0] : null;
-      if (today == null) return undefined;
-      // Trend: mean of the next few days' discharge vs. today, with a 5% band.
-      var trend = null;
-      var future = d.slice(1, 4).filter(function (v) { return typeof v === "number"; });
-      if (future.length) {
-        var mean = future.reduce(function (a, b) { return a + b; }, 0) / future.length;
-        var delta = mean - today, thr = Math.max(1, today * 0.05);
-        trend = delta > thr ? "RISING" : (delta < -thr ? "FALLING" : "STABLE");
-      }
-      return { discharge: today, dischargeTrend: trend };
-    }).catch(function (e) { dbg("flood fetch failed → advisory unavailable", e); return undefined; });
+      if (!j || j.status !== "OK" || !j.severity) return undefined;
+      return {
+        provider: "google",
+        severity: j.severity,            // already our internal level
+        trend: j.trend || null,          // RISING | FALLING | STABLE
+        issuedAt: j.issuedAt || null,
+        gaugeId: j.gaugeId || null,
+        km: typeof j.km === "number" ? j.km : null,
+        source: j.source || "Google Flood Forecasting",
+        sourceUrl: j.sourceUrl || "https://developers.google.com/flood-forecasting"
+      };
+    }).catch(function (e) { dbg("google flood unavailable → rainfall-derived fallback", e); return undefined; });
   }
 
-  // Combine live rainfall (from the weather feed) with the river-discharge
-  // trend into one advisory object. Risk LEVEL is rainfall-derived — an honest
-  // computed advisory, NOT an official flood warning:
+  // Combine the flood signal with live rainfall into one advisory object. When
+  // Google Flood Forecasting is available its severity/trend is authoritative
+  // (it reflects the nearest river gauge to campus). When it is not, we fall
+  // back to the rainfall-derived heuristic — an honest computed estimate, NOT an
+  // official flood warning:
   //   ≥15 mm → SEVERE (high) · ≥5 mm → ELEVATED (moderate) · else NONE (low).
-  // If rainfall is missing but river-discharge is present, the trend drives the
-  // level (RISING → ELEVATED, else NONE). Returns undefined only when BOTH
-  // sources are missing → the calm "Monitoring" state (never "unavailable").
+  // Returns undefined only when BOTH sources are missing → the calm "Monitoring"
+  // state (never "unavailable", never a false "no flood risk").
   function deriveFlood(wx, floodApi) {
-    var hasRain = wx && typeof wx.precip === "number";
-    var hasFlow = floodApi && typeof floodApi.discharge === "number";
-    if (!hasRain && !hasFlow) return undefined;
-    var out = { derived: true, source: "Open-Meteo · rainfall-derived", sourceUrl: "https://open-meteo.com/en/docs/flood-api" };
-    if (hasRain) {
-      out.precip = wx.precip;
-      out.riskLevel = wx.precip >= 15 ? "SEVERE" : (wx.precip >= 5 ? "ELEVATED" : "NONE");
-    } else if (hasFlow) {
-      // No live rainfall, but river-discharge is available: infer a level from
-      // its trend so we stay LOW/MODERATE rather than falling back to Monitoring.
-      out.riskLevel = floodApi.dischargeTrend === "RISING" ? "ELEVATED" : "NONE";
-    } else {
-      out.riskLevel = "UNKNOWN";
+    if (floodApi && floodApi.provider === "google") {
+      var out = {
+        provider: "google",
+        riskLevel: floodApi.severity,    // EXTREME | SEVERE | ELEVATED | NONE | UNKNOWN
+        source: floodApi.source || "Google Flood Forecasting",
+        sourceUrl: floodApi.sourceUrl || "https://developers.google.com/flood-forecasting"
+      };
+      if (floodApi.trend) out.trend = floodApi.trend;
+      if (floodApi.issuedAt) out.issuedAt = floodApi.issuedAt;
+      if (floodApi.km != null) out.km = floodApi.km;
+      if (wx && typeof wx.precip === "number") out.precip = wx.precip; // supporting only
+      return out;
     }
-    if (hasFlow) { out.discharge = floodApi.discharge; out.dischargeTrend = floodApi.dischargeTrend || null; }
+    var hasRain = wx && typeof wx.precip === "number";
+    if (!hasRain) return undefined;
+    var out = { derived: true, source: "Open-Meteo · rainfall-derived", sourceUrl: "https://open-meteo.com/en/docs/flood-api" };
+    out.precip = wx.precip;
+    out.riskLevel = wx.precip >= 15 ? "SEVERE" : (wx.precip >= 5 ? "ELEVATED" : "NONE");
     return out;
   }
 
@@ -650,10 +663,12 @@
     };
   }
 
-  // Flood Advisory sub-widget (rainfall-derived, Open-Meteo), rendered INSIDE
-  // the weather card. Risk LEVEL comes from live rainfall thresholds; river
-  // flow/trend from the Flood API is shown only as supporting context. Never
-  // fabricates: on a total data outage it shows a calm "Monitoring" state,
+  // Flood Advisory sub-widget, rendered INSIDE the weather card. Google Flood
+  // Forecasting (via the /api/flood proxy) is authoritative: its risk LEVEL and
+  // nearest-gauge trend/issued time come straight from the gauge, with live
+  // rainfall shown as supporting context. When Google is unavailable the
+  // rainfall-derived estimate stands in — an honest computed level, never a
+  // fabricated reading. On a total data outage a calm "Monitoring" state shows,
   // never the word "unavailable" and never a false "no flood risk".
   var FLOOD_META = {
     EXTREME:  { cls: "is-extreme",  label: "High flood risk",     icon: "alert-triangle" },
@@ -666,11 +681,11 @@
     UNKNOWN:  { cls: "is-unknown",  label: "Monitoring",          icon: "activity" }
   };
   var FLOOD_TIP = {
-    EXTREME:  "Heavy rainfall — flooding likely on low-lying roads. Avoid flood-prone routes and follow PAGASA / QC DRRMO advisories.",
-    SEVERE:   "Heavy rainfall — flooding likely on low-lying roads. Avoid flood-prone routes and follow PAGASA / QC DRRMO advisories.",
-    ELEVATED: "Moderate rainfall — localized flooding possible in low-lying areas. Keep an alternate route ready.",
-    NONE:     "Low rainfall — flooding not expected. Keep normal precautions during heavy rain.",
-    UNKNOWN:  "Awaiting live rainfall / river data — check PAGASA and QC DRRMO before travelling in heavy rain."
+    EXTREME:  "Extreme flood risk reported — avoid flood-prone roads and low-lying areas. Follow PAGASA / QC DRRMO advisories.",
+    SEVERE:   "Severe flood risk reported — avoid flood-prone roads and low-lying areas. Follow PAGASA / QC DRRMO advisories.",
+    ELEVATED: "Elevated water levels — localized street flooding possible in low-lying areas. Keep an alternate route ready.",
+    NONE:     "No active flood risk reported. Keep normal precautions during heavy rain.",
+    UNKNOWN:  "Awaiting live flood data — check PAGASA and QC DRRMO before travelling in heavy rain."
   };
   var FLOOD_TREND = { RISING: "Rising", FALLING: "Falling", STABLE: "Stable" };
 
@@ -678,6 +693,17 @@
     var lvl = (flood && flood.riskLevel) ? String(flood.riskLevel).toUpperCase() : "UNKNOWN";
     var m = FLOOD_META[lvl] || FLOOD_META.UNKNOWN;
     var metrics = [];
+    var isGoogle = !!(flood && flood.provider === "google");
+    // Google Flood Forecasting — authoritative gauge metrics.
+    if (isGoogle) {
+      if (flood.km != null)
+        metrics.push(["Nearest gauge", Math.round(flood.km) + " km"]);
+      if (flood.trend && FLOOD_TREND[flood.trend])
+        metrics.push(["Water trend", FLOOD_TREND[flood.trend]]);
+      if (flood.issuedAt)
+        metrics.push(["Issued", esc(fmtStamp(flood.issuedAt))]);
+    }
+    // Rainfall-derived fallback — supporting context only.
     if (flood && typeof flood.precip === "number")
       metrics.push(["Rainfall", (Math.round(flood.precip * 10) / 10) + " mm"]);
     if (flood && typeof flood.discharge === "number")
@@ -733,6 +759,25 @@
       }).format(new Date(d));
     } catch (e) { return String(d); }
   }
+  // Long Manila weekday + date ("Wednesday, August 19") — anchors the verdict
+  // line to a specific day so "today" is never ambiguous.
+  function fmtDayDate() {
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric"
+      }).format(new Date());
+    } catch (e) { return manilaWeekday(); }
+  }
+  // Short weekday + date for a bare ISO day ("Thu, Aug 20"). Built from the
+  // date's own parts so no timezone can shift the calendar day.
+  function fmtShortDay(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ""));
+    if (!m) return fmtStamp(d);
+    try {
+      return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" })
+        .format(new Date(+m[1], (+m[2]) - 1, +m[3]));
+    } catch (e) { return fmtStamp(d); }
+  }
 
   function officialLinksHTML() {
     return CFG.officialLinks.map(function (l) {
@@ -749,49 +794,138 @@
     return tags;
   }
 
-  // Announcement FEED card — driven entirely by feed-presence semantics.
-  // NEVER fabricates:
-  //   • active/pending suspension → official title + "Posted …" + tags + CTA
-  //   • feed present, nothing active → truthful NO ACTIVE SUSPENSION ANNOUNCED
-  //   • feed failure (UNKNOWN)     → honest Monitoring note, never "may pasok"
+  /* -------------------------------------------------------------
+     VERDICT — the card's one plain-language answer to "do I have
+     class today?". The status chip in the head carries the machine
+     label ("NO SUSPENSION"); the verdict carries the human meaning
+     ("Classes are in session"), so the two never restate each other.
+     Copy never overstates: an unreachable feed reads as unknown,
+     never as clear.
+     ------------------------------------------------------------- */
+  var PERIOD_WORD = { ALL_DAY: "Whole day", MORNING: "Morning", AFTERNOON: "Afternoon", EVENING: "Evening" };
+  // The seal glyph speaks about CLASSES; the chip icon speaks about STATUS.
+  // Two registers, so the repeated icon never reads as duplication.
+  var SEAL_ICON = {};
+  SEAL_ICON[STATUS.SUSPENDED]          = "calendar-x";
+  SEAL_ICON[STATUS.PARTIALLY_AFFECTED] = "alert-triangle";
+  SEAL_ICON[STATUS.PENDING]            = "calendar-clock";
+  SEAL_ICON[STATUS.UNKNOWN]            = "help-circle";
+  SEAL_ICON[STATUS.NOT_SUSPENDED]      = "calendar-check";
+
+  // Scope line for an active notice: period · scope · when. Only truthful
+  // fields are joined, so a sparse announcement yields a shorter line.
+  function verdictMeta(st) {
+    var parts = [];
+    if (st.period && PERIOD_WORD[st.period]) parts.push(PERIOD_WORD[st.period]);
+    if (st.scope) parts.push(st.scope);
+    if (st.effectiveDate)
+      parts.push(st.effectiveDate === manilaToday() ? "Today" : fmtShortDay(st.effectiveDate));
+    return parts.join(" · ");
+  }
+  // → { title, sub, usedNote }. usedNote suppresses the duplicate note
+  // paragraph further down the card when the note is already the sub-line.
+  function verdictCopy(st) {
+    var dayDate = fmtDayDate();
+    if (st.status === STATUS.UNKNOWN) return {
+      title: "Status unavailable",
+      sub: st.note || "The official source could not be reached — this is not a confirmation that classes are on.",
+      usedNote: true
+    };
+    if (st.status === STATUS.SUSPENDED) return {
+      title: st.headline || "Class suspension in effect",
+      sub: verdictMeta(st) || dayDate
+    };
+    if (st.status === STATUS.PARTIALLY_AFFECTED) return {
+      title: st.headline || "Some classes affected",
+      sub: verdictMeta(st) || dayDate
+    };
+    if (st.status === STATUS.PENDING) return {
+      title: "Suspension scheduled",
+      sub: (st.effectiveDate ? "Takes effect " + fmtShortDay(st.effectiveDate) : "Announced for an upcoming date") +
+        (st.period && PERIOD_WORD[st.period] ? " · " + PERIOD_WORD[st.period] : "")
+    };
+    // NOT_SUSPENDED — either a plain clear day, or a real announcement that
+    // does not reach QCU / does not touch this student's own class times.
+    // Prefer the short scope line for the sub so the sub-line stays scannable;
+    // the longer explanation then flows into .notice-note, which is built for
+    // prose. Only when there is no scope line does the note stand in.
+    if (st.headline) {
+      var meta = verdictMeta(st);
+      return { title: st.headline, sub: meta || st.note || dayDate, usedNote: !meta && !!st.note };
+    }
+    return {
+      title: "Classes are in session",
+      sub: "No suspension announced for QCU today, " + dayDate + "."
+    };
+  }
+  function verdictHTML(st) {
+    var v = verdictCopy(st);
+    return {
+      usedNote: !!v.usedNote,
+      html:
+        '<div class="notice-verdict">' +
+          '<span class="notice-seal" aria-hidden="true"><i data-lucide="' +
+            (SEAL_ICON[st.status] || SEAL_ICON[STATUS.NOT_SUSPENDED]) + '"></i></span>' +
+          '<span class="notice-verdict-text">' +
+            '<span class="notice-verdict-title">' + esc(v.title) + '</span>' +
+            (v.sub ? '<span class="notice-verdict-sub">' + esc(v.sub) + '</span>' : '') +
+          '</span>' +
+        '</div>'
+    };
+  }
+
+  // Clear-day assurance row. "No news" is only trustworthy if the reader can
+  // see the official source WAS read — on a quiet day that fact IS the content,
+  // so it sits in the body rather than buried in the footer.
+  function attestHTML() {
+    return '<p class="notice-attest">' +
+      '<i data-lucide="shield-check" aria-hidden="true"></i>' +
+      'Checked against the official Quezon City announcements feed.' +
+    '</p>';
+  }
+
+  // Quoted OFFICIAL ANNOUNCEMENT block — the source's own title, posting date,
+  // reason and scope tags, held in its own surface so the announcement's words
+  // are never mistaken for our reading of them above.
+  function noticeDocHTML(st) {
+    if (!st.title) return "";
+    var tags = feedTags(st);
+    var stampSrc = st.publishedAt || st.effectiveDate;
+    return '<div class="notice-doc">' +
+      '<span class="notice-doc-label"><i data-lucide="file-text" aria-hidden="true"></i>Official announcement</span>' +
+      '<p class="feed-title">' + esc(st.title) + '</p>' +
+      (stampSrc ? '<p class="feed-time"><i data-lucide="clock" aria-hidden="true"></i>Posted ' + esc(fmtStamp(stampSrc)) + '</p>' : '') +
+      (st.reason ? '<p class="notice-reason"><i data-lucide="info" aria-hidden="true"></i>' + esc(st.reason) + '</p>' : '') +
+      (tags.length ? '<div class="feed-tags">' + tags.map(function (t) {
+        return '<span class="feed-tag">' + esc(t) + '</span>';
+      }).join("") + '</div>' : '') +
+      (st.sourceUrl ? '<a class="feed-cta" href="' + esc(st.sourceUrl) + '" target="_blank" rel="noopener">' +
+        'View official announcement<i data-lucide="external-link" aria-hidden="true"></i></a>' : '') +
+    '</div>';
+  }
+
+  // Suspension notice card — three stacked layers, driven entirely by
+  // feed-presence semantics. NEVER fabricates:
+  //   • active/pending suspension → verdict + quoted official announcement
+  //   • announcement that misses QCU → verdict explaining why + the quote
+  //   • feed present, nothing active → confident all-clear + source attestation
+  //   • feed failure (UNKNOWN)     → honest unavailable, never "may pasok"
   function announcementFeedHTML(st) {
     var m = statusMeta(st.status);
-    var hasNotice = (st.status === STATUS.SUSPENDED || st.status === STATUS.PARTIALLY_AFFECTED || st.status === STATUS.PENDING);
-    var body;
-    if (hasNotice && st.title) {
-      var tags = feedTags(st);
-      var tagHtml = tags.length
-        ? '<div class="feed-tags">' + tags.map(function (t) { return '<span class="feed-tag">' + esc(t) + '</span>'; }).join("") + '</div>'
-        : '';
-      var stampSrc = st.publishedAt || st.effectiveDate;
-      body =
-        (st.headline ? '<p class="notice-headline">' + esc(st.headline) + '</p>' : '') +
-        '<p class="feed-title">' + esc(st.title) + '</p>' +
-        (stampSrc ? '<p class="feed-time"><i data-lucide="clock"></i>Posted ' + esc(fmtStamp(stampSrc)) + '</p>' : '') +
-        (st.reason ? '<p class="notice-note">' + esc(st.reason) + '</p>' : '') +
-        tagHtml +
-        (st.sourceUrl ? '<a class="feed-cta" href="' + esc(st.sourceUrl) + '" target="_blank" rel="noopener">View Official Announcement<i data-lucide="external-link"></i></a>' : '');
-    } else if (st.status === STATUS.UNKNOWN) {
-      body =
-        '<p class="notice-headline">Awaiting official confirmation</p>' +
-        (st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '');
-    } else {
-      // NOT_SUSPENDED — the feed loaded and nothing active covers QCU today.
-      body =
-        '<p class="feed-empty">NO ACTIVE SUSPENSION ANNOUNCED</p>' +
-        (st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '');
-    }
+    var v = verdictHTML(st);
     return '' +
       '<div class="notice ' + m.cls + '">' +
-        '<div class="notice-bar" aria-hidden="true"></div>' +
         '<div class="notice-main">' +
           '<div class="notice-head">' +
-            '<span class="notice-kicker">Class Suspension Notice</span>' +
-            '<span class="notice-status"><i data-lucide="' + m.icon + '"></i>' + m.label + '</span>' +
+            '<span class="notice-kicker"><i data-lucide="scroll-text" aria-hidden="true"></i>Class Suspension Notice</span>' +
+            '<span class="notice-status"><i data-lucide="' + m.icon + '" aria-hidden="true"></i>' + esc(m.label) + '</span>' +
           '</div>' +
-          body +
+          v.html +
+          noticeDocHTML(st) +
+          (st.status === STATUS.NOT_SUSPENDED ? attestHTML() : '') +
+          (!v.usedNote && st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '') +
           '<div class="notice-foot">' +
-            '<span class="notice-updated"><i data-lucide="refresh-cw"></i>Updated ' + esc(fmtUpdated()) + '</span>' +
+            '<span class="notice-updated"><i data-lucide="refresh-cw" aria-hidden="true"></i>Updated ' + esc(fmtUpdated()) + '</span>' +
             '<div class="notice-links">Verify: ' + officialLinksHTML() + '</div>' +
           '</div>' +
         '</div>' +
@@ -807,13 +941,15 @@
   // paint()-driven innerHTML replacement between renders.
   var geoState = "idle"; // idle | requesting | denied | error | unsupported
 
-  // Full-width overall status banner — ALWAYS visible. Every engine status maps
-  // to an honest label; UNKNOWN never reads as a normal/clear day.
+  // Full-width overall status banner — ALWAYS visible except for the quiet
+  // normal state (a plain "no suspension" day needs no alarm banner). Every
+  // alert-state status maps to an honest label; UNKNOWN never reads as a
+  // normal/clear day.
   function overallBannerHTML(st) {
+    if (st.status === STATUS.NOT_SUSPENDED) return "";
     var map = {};
     map[STATUS.SUSPENDED]          = { cls: "is-suspended", icon: "x-octagon",      badge: "WALANG PASOK",       text: "Face-to-Face Classes Suspended" };
     map[STATUS.PARTIALLY_AFFECTED] = { cls: "is-partial",   icon: "alert-triangle", badge: "PARTIALLY AFFECTED", text: "Some Classes Affected Today" };
-    map[STATUS.NOT_SUSPENDED]      = { cls: "is-normal",    icon: "check-circle",   badge: "NORMAL OPERATIONS",  text: "No class suspension in effect" };
     map[STATUS.PENDING]            = { cls: "is-pending",   icon: "calendar-clock", badge: "SCHEDULED",          text: "Suspension announced" + (st.effectiveDate ? " for " + fmtStamp(st.effectiveDate) : "") };
     map[STATUS.UNKNOWN]            = { cls: "is-unknown",   icon: "help-circle",    badge: "STATUS UNAVAILABLE", text: "Monitoring — verify with official channels" };
     var b = map[st.status] || map[STATUS.UNKNOWN];
@@ -886,10 +1022,6 @@
 
   function compose(st, views) {
     return '' +
-      '<div class="status-head">' +
-        '<span class="home-kicker">Today in ' + esc(CFG.place) + '</span>' +
-        '<span class="status-date">' + esc(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "short", day: "numeric" }).format(new Date())) + '</span>' +
-      '</div>' +
       overallBannerHTML(st) +
       campusRainAlertHTML(views.campus && views.campus.wx) +
       '<div class="status-grid">' +
@@ -936,14 +1068,14 @@
     var hasUserFix = !!userLoc;
     var campusLoc = { lat: CFG.lat, lon: CFG.lon };
     Promise.all([
-      fetchWeather(campusLoc), fetchFlood(campusLoc),                       // campus: always
-      fetchSuspensions(), fetchSchedule(),                                  // location-independent
-      hasUserFix ? fetchWeather(userLoc) : Promise.resolve(null),           // user: only with a fix
-      hasUserFix ? fetchFlood(userLoc)   : Promise.resolve(undefined)
+      fetchWeather(campusLoc), fetchFlood(),                       // campus: always (flood proxy is QCU-centric)
+      fetchSuspensions(), fetchSchedule(),                         // location-independent
+      hasUserFix ? fetchWeather(userLoc) : Promise.resolve(null)   // user: only with a fix
     ]).then(function (res) {
       var campus = buildLocationView(res[0], res[1]);
       var list = res[2], schedule = res[3];
-      var user = hasUserFix ? buildLocationView(res[4], res[5]) : null;
+      // Flood is QCU-anchored by the server proxy, so both cards share it.
+      var user = hasUserFix ? buildLocationView(res[4], res[1]) : null;
       // Institution-centric: campus weather is the advisory input (advisory only —
       // it can never flip the official status).
       var st = getQcuSuspensionStatus(list, schedule, campus.risk);
@@ -956,11 +1088,26 @@
     });
   }
 
-  // Loading skeleton, then first paint.
-  paint('<div class="status-head"><span class="home-kicker">Today in ' + esc(CFG.place) + '</span></div>' +
-        '<div class="status-grid"><div class="wx-panel wx-loading"><span class="wx-status">Loading…</span></div>' +
-        '<div class="notice is-unknown"><div class="notice-bar"></div><div class="notice-main">' +
-        '<span class="notice-kicker">Class Suspension Notice</span><p class="notice-headline">Checking official sources…</p></div></div></div>');
+  // Loading skeleton, then first paint. Mirrors the real layout (two location
+  // cards + notice with a verdict row) so the panel settles instead of jumping.
+  paint('<div class="status-grid">' +
+        '<div class="loc-grid">' +
+          '<div class="wx-panel wx-loading"><span class="wx-status">Loading…</span></div>' +
+          '<div class="wx-panel wx-loading"><span class="wx-status">Loading…</span></div>' +
+        '</div>' +
+        '<div class="notice is-unknown"><div class="notice-main">' +
+          '<div class="notice-head">' +
+            '<span class="notice-kicker"><i data-lucide="scroll-text" aria-hidden="true"></i>Class Suspension Notice</span>' +
+            '<span class="notice-status"><i data-lucide="loader" aria-hidden="true"></i>CHECKING</span>' +
+          '</div>' +
+          '<div class="notice-verdict">' +
+            '<span class="notice-seal" aria-hidden="true"><i data-lucide="scan-search"></i></span>' +
+            '<span class="notice-verdict-text">' +
+              '<span class="notice-verdict-title">Checking official sources…</span>' +
+              '<span class="notice-verdict-sub">Reading the Quezon City announcements feed.</span>' +
+            '</span>' +
+          '</div>' +
+        '</div></div></div>');
   refresh();
 
   // Refresh on tab re-focus (cheap, respects weather TTL cache).

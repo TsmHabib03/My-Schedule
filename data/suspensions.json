@@ -1,11 +1,7 @@
-[
-  {
-    "title": "Walang Pasok: Afternoon Face-to-Face Classes – August 17, 2026",
-    "body": "Afternoon face-to-face classes in Quezon City are suspended due to continued heavy rain. Verify coverage for your school/level via the official Quezon City Government announcement.",
-    "effectiveDate": "2026-08-17",
-    "publishedAt": "2026-08-17",
-    "reason": "Continued heavy rain",
-    "source": "Quezon City Government",
-    "sourceUrl": "https://quezoncity.gov.ph/news-and-media/announcements/"
-  }
-]
+{
+  "status": "OK",
+  "checkedAt": "2026-08-19T08:00:18.550Z",
+  "source": "Quezon City Government",
+  "sourceUrl": "https://quezoncity.gov.ph/news-and-media/announcements/",
+  "items": []
+}
