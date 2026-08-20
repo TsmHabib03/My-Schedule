@@ -781,8 +781,8 @@
 
   function officialLinksHTML() {
     return CFG.officialLinks.map(function (l) {
-      return '<a class="notice-link" href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.label) + '</a>';
-    }).join('<span class="notice-link-sep">·</span>');
+      return '<a class="notice-link" href="' + esc(l.url) + '" target="_blank" rel="noopener">' + '<span>' + esc(l.label) + '</span><i data-lucide="external-link" aria-hidden="true"></i></a>';
+    }).join("");
   }
 
   // Concise tag chips extracted from active/pending notice metadata.
@@ -858,6 +858,18 @@
       sub: "No suspension announced for QCU today, " + dayDate + "."
     };
   }
+  function noticeFactsHTML(st) {
+    var facts = [];
+    if (st.effectiveDate) facts.push({ icon: "calendar-days", label: "Effective", value: st.effectiveDate === manilaToday() ? "Today" : fmtShortDay(st.effectiveDate) });
+    if (st.period && PERIOD_WORD[st.period]) facts.push({ icon: "clock-3", label: "Time window", value: PERIOD_WORD[st.period] });
+    if (st.modality === "FACE_TO_FACE") facts.push({ icon: "users", label: "Class mode", value: "Face-to-face only" });
+    else if (st.modality === "ONLINE") facts.push({ icon: "monitor", label: "Class mode", value: "Online only" });
+    else if (st.modality === "ALL") facts.push({ icon: "layers-3", label: "Class mode", value: "All class modes" });
+    if (st.affectedLevel && st.affectedLevel !== "Not specified") facts.push({ icon: "graduation-cap", label: "Applies to", value: st.affectedLevel });
+    if (!facts.length) return "";
+    return '<div class="notice-facts" role="list" aria-label="Suspension notice details">' + facts.map(function (fact) { return '<div class="notice-fact" role="listitem"><span class="notice-fact-icon" aria-hidden="true"><i data-lucide="' + fact.icon + '"></i></span><span class="notice-fact-copy"><span class="notice-fact-label">' + esc(fact.label) + '</span><span class="notice-fact-value">' + esc(fact.value) + '</span></span></div>'; }).join("") + '</div>';
+  }
+
   function verdictHTML(st) {
     var v = verdictCopy(st);
     return {
@@ -892,15 +904,17 @@
     var tags = feedTags(st);
     var stampSrc = st.publishedAt || st.effectiveDate;
     return '<div class="notice-doc">' +
-      '<span class="notice-doc-label"><i data-lucide="file-text" aria-hidden="true"></i>Official announcement</span>' +
+      '<div class="notice-doc-head"><span class="notice-doc-label"><i data-lucide="file-check-2" aria-hidden="true"></i>Official announcement</span>' +
+        (st.source ? '<span class="notice-source"><i data-lucide="landmark" aria-hidden="true"></i>' + esc(st.source) + '</span>' : '') +
+      '</div>' +
       '<p class="feed-title">' + esc(st.title) + '</p>' +
       (stampSrc ? '<p class="feed-time"><i data-lucide="clock" aria-hidden="true"></i>Posted ' + esc(fmtStamp(stampSrc)) + '</p>' : '') +
-      (st.reason ? '<p class="notice-reason"><i data-lucide="info" aria-hidden="true"></i>' + esc(st.reason) + '</p>' : '') +
+      (st.reason ? '<p class="notice-reason"><i data-lucide="cloud-rain" aria-hidden="true"></i><span>' + esc(st.reason) + '</span></p>' : '') +
       (tags.length ? '<div class="feed-tags">' + tags.map(function (t) {
         return '<span class="feed-tag">' + esc(t) + '</span>';
       }).join("") + '</div>' : '') +
       (st.sourceUrl ? '<a class="feed-cta" href="' + esc(st.sourceUrl) + '" target="_blank" rel="noopener">' +
-        'View official announcement<i data-lucide="external-link" aria-hidden="true"></i></a>' : '') +
+        '<span>Open official notice</span><i data-lucide="external-link" aria-hidden="true"></i></a>' : '') +
     '</div>';
   }
 
@@ -917,16 +931,20 @@
       '<div class="notice ' + m.cls + '">' +
         '<div class="notice-main">' +
           '<div class="notice-head">' +
-            '<span class="notice-kicker"><i data-lucide="scroll-text" aria-hidden="true"></i>Class Suspension Notice</span>' +
+            '<span class="notice-kicker"><i data-lucide="megaphone" aria-hidden="true"></i>Class Suspension Notice</span>' +
             '<span class="notice-status"><i data-lucide="' + m.icon + '" aria-hidden="true"></i>' + esc(m.label) + '</span>' +
           '</div>' +
           v.html +
+          noticeFactsHTML(st) +
           noticeDocHTML(st) +
           (st.status === STATUS.NOT_SUSPENDED ? attestHTML() : '') +
-          (!v.usedNote && st.note ? '<p class="notice-note">' + esc(st.note) + '</p>' : '') +
+          (!v.usedNote && st.note ? '<p class="notice-note"><i data-lucide="circle-alert" aria-hidden="true"></i><span>' + esc(st.note) + '</span></p>' : '') +
           '<div class="notice-foot">' +
             '<span class="notice-updated"><i data-lucide="refresh-cw" aria-hidden="true"></i>Updated ' + esc(fmtUpdated()) + '</span>' +
-            '<div class="notice-links">Verify: ' + officialLinksHTML() + '</div>' +
+            '<nav class="notice-links" aria-label="Official suspension verification links">' +
+              '<span class="notice-links-label"><i data-lucide="shield-check" aria-hidden="true"></i>Verify with</span>' +
+              '<span class="notice-link-list">' + officialLinksHTML() + '</span>' +
+            '</nav>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -1097,7 +1115,7 @@
         '</div>' +
         '<div class="notice is-unknown"><div class="notice-main">' +
           '<div class="notice-head">' +
-            '<span class="notice-kicker"><i data-lucide="scroll-text" aria-hidden="true"></i>Class Suspension Notice</span>' +
+            '<span class="notice-kicker"><i data-lucide="megaphone" aria-hidden="true"></i>Class Suspension Notice</span>' +
             '<span class="notice-status"><i data-lucide="loader" aria-hidden="true"></i>CHECKING</span>' +
           '</div>' +
           '<div class="notice-verdict">' +

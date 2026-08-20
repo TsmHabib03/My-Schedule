@@ -8,7 +8,7 @@ const QCU_COORDS = [121.0343, 14.7001]; // [Longitude, Latitude]
 
 // TomTom Routing API Configuration
 // API key should be restricted to this domain in TomTom Developer Portal
-const TOMTOM_API_KEY = (window.ETA_CONFIG && window.ETA_CONFIG.tomtomApiKey) || '';
+const ROUTE_API = "/api/route";
 const TOMTOM_BASE = 'https://api.tomtom.com/routing/1/calculateRoute';
 const TOMTOM_TRAFFIC_STYLE = 'relative'; // 'relative' | 'relative-delay' | 'absolute' | 'disabled'
 
@@ -644,98 +644,28 @@ function classifyTraffic(staticMinutes, trafficMinutes) {
 /**
  * Build TomTom routing URL with traffic
  */
-function buildTomTomUrl(userCoords, includeTraffic = true) {
-  const coords = `${userCoords[0]},${userCoords[1]}:${QCU_COORDS[0]},${QCU_COORDS[1]}`;
-  const trafficParam = includeTraffic ? 'true' : 'false';
-  const url = `${TOMTOM_BASE}/${coords}/json?key=${TOMTOM_API_KEY}&routeType=fastest&traffic=${trafficParam}&travelMode=car&vehicleCommercial=false&avoid=unpavedRoads&computeTravelTimeFor=all&instructionsType=none&report=effectiveSettings`;
-  return url;
-}
-
-/**
- * Fetch routing directions from TomTom API with traffic data.
- * Compares static vs traffic duration for delay calculation.
- */
 async function fetchRoute(userCoords, force = false) {
   const now = Date.now();
-  if (!force && (now - lastRouteTime < ROUTE_THROTTLE_MS)) {
-    return;
-  }
-
-  if (!TOMTOM_API_KEY) {
-    console.warn('TomTom API key not configured (set window.ETA_CONFIG.tomtomApiKey), falling back to OSRM');
-    updateStatus("No traffic API key — using fallback routing", "active");
-    fetchRouteOSRM(userCoords, force);
-    return;
-  }
-
-  updateStatus("Calculating route with live traffic…", "active");
-
+  if (!force && (now - lastRouteTime < ROUTE_THROTTLE_MS)) return;
+  updateStatus("Calculating route with live traffic...", "active");
   try {
-    // Fetch both static (no traffic) and traffic-aware routes in parallel
-    const [staticRes, trafficRes] = await Promise.all([
-      fetch(buildTomTomUrl(userCoords, false)),
-      fetch(buildTomTomUrl(userCoords, true))
-    ]);
-
-    if (!staticRes.ok) throw new Error(`TomTom static route error (${staticRes.status})`);
-    if (!trafficRes.ok) throw new Error(`TomTom traffic route error (${trafficRes.status})`);
-
-    const [staticData, trafficData] = await Promise.all([
-      staticRes.json(),
-      trafficRes.json()
-    ]);
-
-    if (!staticData.routes || staticData.routes.length === 0 ||
-        !trafficData.routes || trafficData.routes.length === 0) {
-      throw new Error("No route found");
-    }
-
+    const url = ROUTE_API + "?lat=" + encodeURIComponent(userCoords[1]) + "&lon=" + encodeURIComponent(userCoords[0]);
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("Route proxy HTTP " + res.status);
+    const data = await res.json();
+    if (!data || data.status !== "OK" || !Array.isArray(data.geometry)) throw new Error("Invalid route response");
     lastRouteTime = Date.now();
-    const staticRoute = staticData.routes[0];
-    const trafficRoute = trafficData.routes[0];
-
-    // Update GeoJSON route geometry on map (use traffic route geometry)
-    // TomTom returns points as {latitude, longitude} objects, convert to [lon, lat] for GeoJSON
-    const routeCoords = trafficRoute.legs[0].points.map(p => [p.longitude, p.latitude]);
-    if (map && map.getSource('route')) {
-      map.getSource('route').setData({
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: routeCoords
-        }
-      });
-    }
-
-    if (!isUserPanning) {
-      fitMapBounds(userCoords, false);
-    }
-
-    // Durations are in seconds
-    const staticMins = Math.max(1, Math.ceil(staticRoute.summary.travelTimeInSeconds / 60));
-    const trafficMins = Math.max(1, Math.ceil(trafficRoute.summary.travelTimeInSeconds / 60));
-    const km = (trafficRoute.summary.lengthInMeters / 1000).toFixed(1);
-
-    // Real, measured traffic delay — safe to classify and label "Live"
-    const trafficInfo = classifyTraffic(staticMins, trafficMins);
-
-    renderRoute({
-      normalMins: staticMins,
-      currentMins: trafficMins,
-      km,
-      trafficInfo,
-      hasLiveTraffic: true,
-      trafficRoute
-    });
-    updateStatus("GPS tracking active — live traffic", "success");
-
+    if (map && map.getSource("route")) map.getSource("route").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: data.geometry } });
+    if (!isUserPanning) fitMapBounds(userCoords, false);
+    const staticMins = Number(data.normalMins);
+    const trafficMins = Number(data.currentMins);
+    renderRoute({ normalMins: staticMins, currentMins: trafficMins, km: data.distanceKm, trafficInfo: classifyTraffic(staticMins, trafficMins), hasLiveTraffic: true, trafficRoute: null });
+    updateStatus("GPS tracking active - live traffic", "success");
   } catch (err) {
-    console.warn("TomTom routing unavailable, falling back to OSRM:", err);
+    console.warn("Route proxy unavailable, falling back to OSRM:", err);
     fetchRouteOSRM(userCoords, force);
   }
 }
-
 /**
  * Fallback to OSRM if TomTom is unavailable
  */

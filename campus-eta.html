@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -20,7 +20,7 @@
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
   
   <!-- CSS -->
-  <link rel="stylesheet" href="assets/css/styles.css?v=40">
+  <link rel="stylesheet" href="assets/css/styles.css?v=41">
   <link rel="stylesheet" href="assets/css/eta.css?v=39">
 </head>
 <body data-page="campus-eta">
@@ -146,16 +146,9 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
   <!-- App & ETA Scripts -->
-  <script>
-    // ETA Configuration - TomTom API key (restrict to this domain in TomTom Developer Portal)
-    window.ETA_CONFIG = {
-      tomtomApiKey: '' // Set via build process or environment variable
-    };
-  </script>
   <script src="assets/js/app.js?v=39"></script>
   <script src="assets/js/eta.js?v=39"></script>
   <script>
-    init();
     initETA();
   </script>
 </body>

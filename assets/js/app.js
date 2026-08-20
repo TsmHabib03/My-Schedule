@@ -39,6 +39,32 @@ const page = document.body.dataset.page || "home";
 /* ── Utils ───────────────────────────────────────────── */
 function iconify() { if (window.lucide) window.lucide.createIcons(); }
 
+function esc(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const QCU_TIME = window.QCU_TIME || (() => {
+  const zone = "Asia/Manila";
+  function weekday(date = new Date()) {
+    return new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "long" }).format(date);
+  }
+  function minutes(date = new Date()) {
+    const value = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).formatToParts(date);
+    const p = Object.fromEntries(value.map(x => [x.type, x.value]));
+    return Number(p.hour) * 60 + Number(p.minute) + Number(p.second) / 60;
+  }
+  function dateLabel(date = new Date(), opts = { month: "short", day: "numeric", year: "numeric" }) {
+    return new Intl.DateTimeFormat([], { ...opts, timeZone: zone }).format(date);
+  }
+  return Object.freeze({ zone, weekday, minutes, dateLabel });
+})();
+window.QCU_TIME = QCU_TIME;
+
 async function loadJson(path, fallback) {
   try {
     const r = await fetch(path, { cache: "no-store" });
@@ -57,7 +83,7 @@ function parseMinutes(v) {
 }
 
 function minutesNow(date = new Date()) {
-  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+  return QCU_TIME.minutes(date);
 }
 
 function formatTime(v) {
@@ -79,8 +105,8 @@ function formatDuration(totalSeconds) {
 }
 
 function getStatus(item, now = new Date()) {
-  if (item.noClasses) return item.day === dayNames[now.getDay()] ? "today-off" : "inactive";
-  const today = dayNames[now.getDay()];
+  if (item.noClasses) return item.day === QCU_TIME.weekday() ? "today-off" : "inactive";
+  const today = QCU_TIME.weekday(now);
   if (item.day !== today) return "inactive";
   const cur = minutesNow(now);
   const s = parseMinutes(item.start);
@@ -94,7 +120,7 @@ function getStatus(item, now = new Date()) {
 }
 
 function getCurrentAndNext(now = new Date()) {
-  const today = dayNames[now.getDay()];
+  const today = QCU_TIME.weekday(now);
   const current = state.schedule.find(x => !x.noClasses && getStatus(x, now) === "current");
   const next = state.schedule
     .filter(x => !x.noClasses && x.day === today && parseMinutes(x.start) > minutesNow(now))
@@ -191,7 +217,7 @@ function dayWithBreaks(day) {
 }
 
 function orderedSchedule(now = new Date()) {
-  const today = dayNames[now.getDay()];
+  const today = QCU_TIME.weekday(now);
   return [...state.schedule].sort((a, b) => {
     if (a.day === today && b.day !== today) return -1;
     if (a.day !== today && b.day === today) return 1;
@@ -293,7 +319,7 @@ function weekOverview(now = new Date()) {
 }
 
 function weekStripTemplate(now = new Date()) {
-  const today = dayNames[now.getDay()];
+  const today = QCU_TIME.weekday(now);
   const counts = weekOverview(now);
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const max = Math.max(1, ...days.map(d => counts[d] || 0));
@@ -472,8 +498,8 @@ function countdownTemplate(item, label) {
 /* ── Home Page ───────────────────────────────────────── */
 function renderHome() {
   const now = new Date();
-  const today = dayNames[now.getDay()];
-  const hour = now.getHours();
+  const today = QCU_TIME.weekday(now);
+  const hour = Math.floor(QCU_TIME.minutes(now) / 60);
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const todaysClasses = state.schedule.filter(x => x.day === today && !x.noClasses);
   const { current, next } = getCurrentAndNext(now);
@@ -482,7 +508,7 @@ function renderHome() {
 
   setText("home-greeting", `${greeting}, Habib`);
   setText("hero-class-count", `${todaysClasses.length}`);
-  setText("hero-today-date", now.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }));
+  setText("hero-today-date", QCU_TIME.dateLabel(now));
 
   const weekEl = document.getElementById("home-week-strip");
   if (weekEl) setInnerHTML(weekEl, weekStripTemplate(now));
@@ -573,7 +599,7 @@ function openDayModal(day) {
   if (!modal || !content) return;
 
   const classes = classesForDay(day);
-  const isToday = day === dayNames[new Date().getDay()];
+  const isToday = day === QCU_TIME.weekday();
   const hours = classes.reduce((sum, x) => sum + (parseMinutes(x.end) - parseMinutes(x.start)) / 60, 0);
 
   const rows = classes.length
@@ -653,7 +679,7 @@ function renderSchedule() {
   const rows = document.getElementById("schedule-rows");
   if (!rows) return;
   const now   = new Date();
-  const today = dayNames[now.getDay()];
+  const today = QCU_TIME.weekday(now);
 
   // Build rows with break/free periods between classes on the same day
   const html = [];
@@ -731,7 +757,7 @@ function formatTimeShort(v) {
 function renderToday() {
   const list = document.getElementById("today-cards");
   if (!list) return;
-  const today = dayNames[new Date().getDay()];
+  const today = QCU_TIME.weekday();
   const todaysClasses = state.schedule.filter(x => x.day === today);
   list.innerHTML = todaysClasses.length
     ? todaysClasses.map(cardTemplate).join("")
@@ -867,11 +893,11 @@ function renderSettings() {
 /* ── Clock ───────────────────────────────────────────── */
 function updateClock() {
   const now  = new Date();
-  const hour = now.getHours();
+  const hour = Math.floor(QCU_TIME.minutes(now) / 60);
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  setText("live-time", now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
-  setText("live-day",  dayNames[now.getDay()]);
-  setText("live-date", now.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }));
+  setText("live-time", new Intl.DateTimeFormat([], { timeZone: QCU_TIME.zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }).format(now));
+  setText("live-day",  QCU_TIME.weekday());
+  setText("live-date", QCU_TIME.dateLabel(now));
   setText("greeting",  `${greeting}, Habib`);
 }
 
@@ -929,7 +955,18 @@ const TASKS_KEY = "qcu-tasks";
 function loadTasks() {
   try {
     const raw = localStorage.getItem(TASKS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(t => t && typeof t === "object").map(t => ({
+      id: String(t.id || newTaskId()),
+      title: String(t.title || "").slice(0, 300),
+      description: String(t.description || "").slice(0, 4000),
+      subject: String(t.subject || ""),
+      priority: ["high", "medium", "low"].includes(t.priority) ? t.priority : "medium",
+      deadline: /^\\d{4}-\\d{2}-\\d{2}$/.test(String(t.deadline || "")) ? String(t.deadline) : "",
+      done: Boolean(t.done),
+      createdAt: Number.isFinite(Number(t.createdAt)) ? Number(t.createdAt) : Date.now()
+    }));
   } catch { return []; }
 }
 
@@ -1020,17 +1057,17 @@ function taskCardTemplate(t) {
   const priority = t.priority ? priorityBadge(t.priority) : "";
 
   return `
-    <article class="task-card${doneClass}${priorityClass}" data-task-id="${t.id}">
-      <button class="task-check-btn${t.done ? " checked" : ""}" data-action="toggle" data-id="${t.id}" aria-label="Toggle done"></button>
+    <article class="task-card${doneClass}${priorityClass}" data-task-id="${esc(t.id)}">
+      <button class="task-check-btn${t.done ? " checked" : ""}" data-action="toggle" data-id="${esc(t.id)}" aria-label="Toggle done"></button>
       <div class="task-card-content">
         <div class="task-card-header">
-          <h3 class="task-card-title${t.done ? " done" : ""}">${t.title || "Untitled task"}</h3>
+          <h3 class="task-card-title${t.done ? " done" : ""}">${esc(t.title || "Untitled task")}</h3>
           <div class="task-card-actions">
-            <button class="icon-btn" data-action="edit" data-id="${t.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
-            <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${t.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+            <button class="icon-btn" data-action="edit" data-id="${esc(t.id)}" aria-label="Edit"><i data-lucide="pencil"></i></button>
+            <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${esc(t.id)}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
           </div>
         </div>
-        ${t.description ? `<p class="task-card-desc">${t.description}</p>` : ""}
+        ${t.description ? `<p class="task-card-desc">${esc(t.description)}</p>` : ""}
         <div class="task-card-footer">
           ${priority}
           ${subject}
@@ -1160,7 +1197,15 @@ const NOTES_KEY = "qcu-notes";
 function loadNotes() {
   try {
     const raw = localStorage.getItem(NOTES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(n => n && typeof n === "object").map(n => ({
+      id: String(n.id || newNoteId()),
+      title: String(n.title || "").slice(0, 300),
+      subject: String(n.subject || ""),
+      body: String(n.body || "").slice(0, 12000),
+      createdAt: Number.isFinite(Number(n.createdAt)) ? Number(n.createdAt) : Date.now()
+    }));
   } catch { return []; }
 }
 
@@ -1215,20 +1260,20 @@ function noteCardTemplate(n) {
   const subject = n.subject
     ? `<span class="subject-chip" style="background:${sc.bg};color:${sc.fg};border-color:${sc.border};">${subjectDisplayName(n.subject)}</span>`
     : "";
-  const date = n.createdAt ? `<span class="task-meta"><i data-lucide="clock"></i>${new Date(n.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}</span>` : "";
+  const date = n.createdAt ? `<span class="task-meta"><i data-lucide="clock"></i>${QCU_TIME.dateLabel(new Date(n.createdAt), { month: "short", day: "numeric" })}</span>` : "";
   const bodyPreview = (n.body || "").length > 140 ? (n.body || "").slice(0, 140) + "…" : (n.body || "");
 
   return `
-    <article class="note-card" data-note-id="${n.id}" style="border-left:3px solid ${sc.border || 'var(--blue)'};">
+    <article class="note-card" data-note-id="${esc(n.id)}" style="border-left:3px solid ${sc.border || 'var(--blue)'};">
       <div class="note-card-inner">
         <div class="note-card-header">
-          <h3 class="note-card-title">${n.title || "Untitled note"}</h3>
+          <h3 class="note-card-title">${esc(n.title || "Untitled note")}</h3>
           <div class="task-card-actions">
-            <button class="icon-btn" data-action="edit-note" data-id="${n.id}" aria-label="Edit"><i data-lucide="pencil"></i></button>
-            <button class="icon-btn icon-btn--danger" data-action="delete-note" data-id="${n.id}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+            <button class="icon-btn" data-action="edit-note" data-id="${esc(n.id)}" aria-label="Edit"><i data-lucide="pencil"></i></button>
+            <button class="icon-btn icon-btn--danger" data-action="delete-note" data-id="${esc(n.id)}" aria-label="Delete"><i data-lucide="trash-2"></i></button>
           </div>
         </div>
-        ${bodyPreview ? `<p class="note-card-body">${bodyPreview}</p>` : ""}
+        ${bodyPreview ? `<p class="note-card-body">${esc(bodyPreview)}</p>` : ""}
         <div class="note-card-footer">
           ${subject}
           ${date}
@@ -1347,6 +1392,8 @@ function tick() {
 
 /* ── Init ────────────────────────────────────────────── */
 async function init() {
+  if (window.__QCU_INIT_STARTED) return;
+  window.__QCU_INIT_STARTED = true;
   state.schedule  = await loadJson("data/schedule.json",  QCU_DEFAULTS.schedule);
   state.buildings = await loadJson("data/buildings.json", QCU_DEFAULTS.buildings);
 
@@ -1495,7 +1542,7 @@ async function init() {
   }
 
   iconify();
-  setInterval(tick, 1000);
+  if (!window.__QCU_TICK_TIMER) window.__QCU_TICK_TIMER = setInterval(tick, 1000);
 }
 
 init();
