@@ -118,7 +118,7 @@
       </div>`;
   }
 
-  function renderNotConnected(mode) {
+  function renderNotConnected(mode, diagnostic = null) {
     const isServerUnavailable = mode === "server_unavailable";
     const isError = mode === "error" || mode === "unconfigured" || isServerUnavailable;
     const statusCopy = mode === "unconfigured"
@@ -150,13 +150,13 @@
             ${permissionRow("school", "Classroom access", "Read your courses and posted class activity.")}
             ${permissionRow("mail", "Email remains optional", "Gmail metadata is requested only when you enable it.")}
           </div>
-          ${mode === "unconfigured" ? `<p class="google-inline-error">Google OAuth environment variables are not configured on this deployment.</p>` : ""}
+          ${mode === "unconfigured" ? `<p class="google-inline-error">Google OAuth environment variables are not configured on this deployment.${diagnostic && diagnostic.missing && diagnostic.missing.length ? ` Missing: ${esc(diagnostic.missing.join(", "))}.` : ""}${diagnostic && diagnostic.invalid && diagnostic.invalid.length ? ` Invalid: ${esc(diagnostic.invalid.join(", "))}.` : ""}</p>` : ""}
           ${isServerUnavailable ? `<p class="google-inline-error">This preview is serving static HTML only. Start My-Schedule with Cloudflare Pages Functions before connecting Google.</p>` : ""}
           ${mode === "idle" ? `
             <a class="google-primary-button" href="${apiPath("/api/google/connect?return=settings.html%23google-integration")}">
               <i data-lucide="log-in"></i>
               Connect Google Account
-            </a>` : isServerUnavailable || mode === "error" ? `
+            </a>` : isServerUnavailable || mode === "error" || mode === "unconfigured" ? `
             <button class="google-primary-button" type="button" data-google-action="retry-status">
               <i data-lucide="refresh-cw"></i>
               Retry Server Check
@@ -451,7 +451,12 @@
     try {
       account = await api("/api/google/status");
       if (!account.connected) {
-        renderNotConnected(account.status === "unconfigured" ? "unconfigured" : "idle");
+        renderNotConnected(account.status === "unconfigured" ? "unconfigured" : "idle", account);
+        if (account.status === "unconfigured") {
+          const problems = [...(account.missing || []), ...(account.invalid || [])];
+          if (problems.length) showFeedback(`Cloudflare runtime configuration required: ${problems.join(", ")}.`, "error");
+          else if (account.detail) showFeedback(account.detail, "error");
+        }
         return;
       }
       cache.email = account.email;
