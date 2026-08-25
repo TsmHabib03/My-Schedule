@@ -2,6 +2,9 @@
 # This project is a static site (HTML/CSS/JS). No framework build is required.
 # The build output is the repository root itself.
 
-name = "qcu-student-portal"
+name = "my-schedule2"
 pages_build_output_dir = "."
 compatibility_date = "2024-11-01"
+
+# This repository is deployed by Cloudflare Pages. Do not use `wrangler deploy`,
+# which is the Workers command and requires a Worker entry point.

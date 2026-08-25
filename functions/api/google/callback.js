@@ -47,7 +47,10 @@ export async function onRequestGet(context) {
     if (!session.refreshToken) throw new Error("Google did not return a renewable authorization");
     const destination = `${returnTo.split("#")[0]}?google=connected#google-integration`;
     return redirect(destination, { "Set-Cookie": await sessionHeader(context, session) });
-  } catch (_) {
-    return redirect(`${returnTo.split("#")[0]}?google=failed#google-integration`, { "Set-Cookie": clearState });
+  } catch (error) {
+    const message = String(error && error.message || "OAuth callback failed").slice(0, 180);
+    console.error("Google OAuth callback failed:", message);
+    const reason = encodeURIComponent(message);
+    return redirect(`${returnTo.split("#")[0]}?google=failed&reason=${reason}#google-integration`, { "Set-Cookie": clearState });
   }
 }

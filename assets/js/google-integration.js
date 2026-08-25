@@ -422,12 +422,20 @@
       failed: ["We couldn't connect your Google account. Please try again.", "error"],
       unconfigured: ["Google OAuth is not configured on this deployment.", "error"]
     };
-    if (messages[result]) showFeedback(messages[result][0], messages[result][1]);
+    if (messages[result]) {
+      const reason = result === "failed" ? url.searchParams.get("reason") : "";
+      showFeedback(reason ? `${messages[result][0]} (${reason})` : messages[result][0], messages[result][1]);
+    }
     url.searchParams.delete("google");
     history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
   async function loadStatus() {
+    if (location.hostname.endsWith("github.io")) {
+      renderNotConnected("server_unavailable");
+      showFeedback("This GitHub Pages preview is static and cannot run Google OAuth. Open the deployed Cloudflare Pages URL instead.", "error");
+      return;
+    }
     if (!navigator.onLine) {
       if (cache.email) {
         account = { connected: true, email: cache.email, preferences: cache.preferences, permissions: cache.permissions };
