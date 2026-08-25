@@ -9,7 +9,7 @@
     "dev": "node scripts/dev-server.mjs",
     "dev:wrangler": "wrangler pages dev . --port 8790",
     "google:configure": "node scripts/configure-google-oauth.mjs",
-    "deploy": "wrangler pages deploy . --project-name my-schedule2"
+    "deploy": "wrangler pages deploy . --project-name my-schedule-5hs"
   },
   "devDependencies": {
     "wrangler": "^4.125.0"

@@ -2,9 +2,14 @@
 # This project is a static site (HTML/CSS/JS). No framework build is required.
 # The build output is the repository root itself.
 
-name = "my-schedule2"
+name = "my-schedule-5hs"
 pages_build_output_dir = "."
 compatibility_date = "2024-11-01"
+
+[vars]
+# OAuth client IDs are public identifiers. The matching client secret must
+# remain configured as a protected Cloudflare runtime secret.
+GOOGLE_CLIENT_ID = "538685955362-pv7smi77dsjsp8suqrnejs0fj6ppdajf.apps.googleusercontent.com"
 
 # This repository is deployed by Cloudflare Pages. Do not use `wrangler deploy`,
 # which is the Workers command and requires a Worker entry point.
