@@ -18,6 +18,9 @@
 # Live data / API responses are never cached as "current".
 /api/*
   Cache-Control: no-store
+/api/google/*
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
 /data/*.json
   Cache-Control: no-store
 

@@ -869,6 +869,7 @@ function closeModal() {
 
 /* ── Settings Page ───────────────────────────────────── */
 function renderSettings() {
+  window.QCUGoogleIntegration?.init();
   const notifToggle = document.getElementById("notifications-toggle");
   if (notifToggle) {
     notifToggle.checked = state.settings.notifications;
@@ -886,6 +887,7 @@ function renderSettings() {
 
   document.getElementById("reset-data")?.addEventListener("click", () => {
     localStorage.removeItem("qcu-notifications");
+    window.QCUGoogleIntegration?.clearLocalCache();
     location.reload();
   });
 }

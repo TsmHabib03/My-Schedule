@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v41";
+const CACHE_NAME = "qcu-schedule-v43";
 const STATIC_ASSETS = [
   "./",
   "index.html",
@@ -14,6 +14,7 @@ const STATIC_ASSETS = [
   "assets/css/styles.css",
   "assets/css/eta.css",
   "assets/js/app.js",
+  "assets/js/google-integration.js",
   "assets/js/eta.js",
   "assets/js/status.js",
   "assets/images/QCU college of computer studies logo.jpg",
@@ -32,7 +33,8 @@ const NO_CACHE_PATHS = [
   "data/flood.json",
   "/api/suspensions",
   "/api/flood",
-  "/api/weather-alerts"
+  "/api/weather-alerts",
+  "/api/google/"
 ];
 
 function isNoCachePath(url) {
@@ -54,7 +56,30 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  const url = event.request.url;
+  const requestUrl = new URL(event.request.url);
+
+  // Browser extensions and third-party resources are outside this PWA's
+  // cache. Cache.put only supports http(s), and cross-origin responses do not
+  // belong in the app shell cache.
+  if (!/^https?:$/.test(requestUrl.protocol) || requestUrl.origin !== self.location.origin) return;
+
+  const url = requestUrl.href;
+
+  // Google integration is network-only, but an offline failure must remain a
+  // JSON error. Returning offline.html here would look like a successful empty
+  // sync to the client and could replace the last cached Classroom feed.
+  if (url.includes("/api/google/")) {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() => new Response(
+        JSON.stringify({ status: "OFFLINE", error: "Offline - showing last synced updates." }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }
+        }
+      ))
+    );
+    return;
+  }
 
   // For schedule data: always fetch from network, never cache.
   // { cache: "no-store" } forces the browser to bypass its own HTTP cache so
@@ -81,7 +106,11 @@ self.addEventListener("fetch", (event) => {
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          event.waitUntil(
+            caches.open(CACHE_NAME)
+              .then((cache) => cache.put(event.request, copy))
+              .catch(() => {})
+          );
         }
         return response;
       })

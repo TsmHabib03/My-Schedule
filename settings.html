@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#005BAC">
-  <meta name="description" content="App settings for QCU Student Portal ??? notifications and data management.">
+  <meta name="description" content="App settings for QCU Student Portal, including notifications and Google Classroom integration.">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -15,13 +15,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/styles.css?v=41">
+  <link rel="stylesheet" href="assets/css/styles.css?v=42">
 </head>
 <body data-page="settings">
   <div class="app-shell">
     <header id="app-header" class="page-header"></header>
 
-    <main class="page-container section-stack" style="max-width:680px;">
+    <main class="page-container section-stack settings-page">
 
       <section class="portal-card">
         <h1 class="page-title">Settings</h1>
@@ -30,6 +30,14 @@
 
       <!-- Notifications -->
       <section style="display:flex;flex-direction:column;gap:10px;">
+
+        <a class="settings-item settings-item-google" href="#google-integration">
+          <div class="settings-label-wrap">
+            <p class="settings-label-title">Google Integration</p>
+            <p class="settings-label-sub">Connect Classroom and optional email updates.</p>
+          </div>
+          <i data-lucide="graduation-cap" style="flex-shrink:0;color:var(--success);"></i>
+        </a>
 
         <a class="settings-item" href="buildings.html">
           <div class="settings-label-wrap">
@@ -69,12 +77,59 @@
 
       </section>
 
+      <section id="google-integration" class="google-integration" aria-labelledby="google-integration-title">
+        <div class="google-integration-heading">
+          <div>
+            <p class="google-section-kicker">Google Integration</p>
+            <h2 id="google-integration-title" class="section-title">Google Classroom &amp; Email</h2>
+            <p class="google-section-copy">Connect your Google account to receive updates when new announcements, materials, assignments, or other Classroom activity are posted.</p>
+          </div>
+          <span id="google-status-indicator" class="google-status-badge is-loading">Checking</span>
+        </div>
+
+        <div id="google-feedback" class="google-feedback" role="status" aria-live="polite" hidden></div>
+        <div id="google-account-card" aria-live="polite" aria-busy="true">
+          <div class="google-account-card google-card-skeleton">
+            <div class="google-card-band"></div>
+            <div class="google-card-body">
+              <span class="skeleton-line skeleton-line-lg"></span>
+              <span class="skeleton-line"></span>
+              <span class="skeleton-line skeleton-line-sm"></span>
+            </div>
+          </div>
+        </div>
+
+        <div id="google-updates-section" class="google-updates-section" hidden>
+          <div class="google-updates-heading">
+            <div>
+              <p class="google-section-kicker">Activity Feed</p>
+              <h2 class="section-title">Recent Classroom Updates</h2>
+            </div>
+            <span id="google-update-count" class="google-update-count">0 updates</span>
+          </div>
+          <div id="google-offline-notice" class="google-offline-notice" hidden>
+            <i data-lucide="wifi-off"></i>
+            <span>Offline - showing last synced updates</span>
+          </div>
+          <div id="google-updates-list" class="google-updates-list"></div>
+        </div>
+
+        <div class="google-privacy">
+          <i data-lucide="shield-check"></i>
+          <div>
+            <h3>Your Google data</h3>
+            <p>My-Schedule only uses the Google services you authorize for Classroom and notification features. Your Google password is never requested or stored.</p>
+          </div>
+        </div>
+      </section>
+
     </main>
 
     <nav id="bottom-nav" class="bottom-nav" aria-label="Primary navigation"></nav>
   </div>
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-  <script src="assets/js/app.js?v=39"></script>
+  <script src="assets/js/google-integration.js?v=3"></script>
+  <script src="assets/js/app.js?v=40"></script>
 </body>
 </html>
