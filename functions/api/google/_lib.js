@@ -91,14 +91,39 @@ export function redirect(location, headers = {}) {
   return new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "no-store", ...headers } });
 }
 
+// Google matches `redirect_uri` byte-for-byte against the Authorized redirect
+// URIs registered on the OAuth client, and it accepts no wildcards. Cloudflare
+// Pages hands every deployment its own hostname (<hash>.<project>.pages.dev),
+// so deriving the redirect URI from the incoming request origin guarantees
+// `Error 400: redirect_uri_mismatch` on any origin that was not registered by
+// hand. GOOGLE_PUBLIC_ORIGIN pins the flow to the one origin that is.
+export function canonicalOrigin(context) {
+  const env = context.env || {};
+  const configured = String(env.GOOGLE_PUBLIC_ORIGIN || "").trim();
+  if (!configured) return null;
+  try {
+    return new URL(configured).origin;
+  } catch (_) {
+    return null;
+  }
+}
+
 export function oauthConfig(context) {
   const env = context.env || {};
   const clientId = env.GOOGLE_CLIENT_ID;
   const clientSecret = env.GOOGLE_CLIENT_SECRET;
   const sessionSecret = env.GOOGLE_SESSION_SECRET;
   if (!clientId || !clientSecret || !sessionSecret) throw new Error("Google OAuth is not configured");
-  const origin = new URL(context.request.url).origin;
-  return { clientId, clientSecret, sessionSecret, redirectUri: `${origin}/api/google/callback` };
+  const requestOrigin = new URL(context.request.url).origin;
+  const origin = canonicalOrigin(context) || requestOrigin;
+  return {
+    clientId,
+    clientSecret,
+    sessionSecret,
+    origin,
+    requestOrigin,
+    redirectUri: `${origin}/api/google/callback`
+  };
 }
 
 export function safeReturnTo(value) {

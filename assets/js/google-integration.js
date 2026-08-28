@@ -12,9 +12,15 @@
   let syncing = false;
   let autoRefreshTimer = null;
 
-  function apiPath(path) {
+  // True when the page is served by a plain static server (Live Server) and API
+  // calls are being redirected to the project's own dev server on port 8788.
+  function usingProxiedApi() {
     const isLocalHost = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-    if (isLocalHost && localStaticPorts.has(location.port)) {
+    return isLocalHost && localStaticPorts.has(location.port);
+  }
+
+  function apiPath(path) {
+    if (usingProxiedApi()) {
       return `${location.protocol}//${location.hostname}:8788${path}`;
     }
     return path;
@@ -473,7 +479,14 @@
       } else if (error.status === 503) renderNotConnected("unconfigured");
       else {
         renderNotConnected("error");
-        showFeedback("We couldn't check your Google connection. Please try again.", "error");
+        // A refused connection throws a TypeError with no status or code. When
+        // API calls are proxied to port 8788, that almost always means the
+        // project's dev server simply isn't running.
+        if (usingProxiedApi()) {
+          showFeedback("The API server on port 8788 isn't responding. Run `npm run dev` in the project folder, then reload this page (or open http://127.0.0.1:8788/settings.html#google-integration directly).", "error");
+        } else {
+          showFeedback("We couldn't check your Google connection. Please try again.", "error");
+        }
       }
     }
   }
