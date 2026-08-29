@@ -23,7 +23,7 @@ const OUT = new URL("../data/flood.json", import.meta.url);
 const BASE = "https://floodforecasting.googleapis.com/v1";
 
 // Quezon City reference point (same as the weather widget's CFG.lat/lon).
-const QC = { lat: 14.689, lon: 121.0437 };
+const QC = { lat: 14.7001, lon: 121.0343 };
 // Only trust a gauge as "local" if it is within this radius of QC.
 const MAX_KM = 60;
 

@@ -43,6 +43,6 @@ For local development, copy `.dev.vars.example` to `.dev.vars`, add the real val
 npm run dev
 ```
 
-Open `http://127.0.0.1:8788/settings.html#google-integration`. If the page is opened through VS Code Live Server on port `5500`, the frontend automatically uses the API server on port `8788`.
+Open `http://127.0.0.1:8788/google.html#google-integration`. If the page is opened through VS Code Live Server on port `5500`, the frontend automatically uses the API server on port `8788`.
 
 `npm run dev:wrangler` remains available for testing the Cloudflare Pages runtime directly on port `8790`.

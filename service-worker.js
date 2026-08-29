@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v43";
+const CACHE_NAME = "qcu-schedule-v45";
 const STATIC_ASSETS = [
   "./",
   "index.html",
@@ -9,6 +9,8 @@ const STATIC_ASSETS = [
   "settings.html",
   "tasks.html",
   "notes.html",
+  "workspace.html",
+  "google.html",
   "offline.html",
   "manifest.json",
   "assets/css/styles.css",

@@ -14,7 +14,7 @@ import {
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const oauthState = await readOauthState(context).catch(() => null);
-  const returnTo = oauthState && oauthState.returnTo ? oauthState.returnTo : "/settings.html#google-integration";
+  const returnTo = oauthState && oauthState.returnTo ? oauthState.returnTo : "/google.html#google-integration";
   const clearState = clearCookie(OAUTH_COOKIE, context.request);
 
   if (url.searchParams.get("error")) {

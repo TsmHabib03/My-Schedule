@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=42">
+<link rel="stylesheet" href="assets/css/styles.css?v=43">
 </head>
 <body data-page="home">
   <div class="app-shell">
@@ -51,10 +51,30 @@
         </div>
       </section>
 
-      <!-- 1b. Today in Quezon City ??? weather + class suspension -->
+      <!-- 1b. Today's Schedule -->
+      <div class="home-today-head">
+        <h2 class="home-kicker">Today's schedule</h2>
+      </div>
+      <div id="today-grid" class="home-today-grid"></div>
+
+      <!-- 1c. Class Tracker + Countdown -->
+      <section class="home-nownext">
+        <div class="home-nownext-head">
+          <h2 class="home-kicker">Class tracker</h2>
+          <span class="home-nownext-state" id="countdown-state-label">???</span>
+        </div>
+        <div id="home-tracker" class="home-tracker">
+          <div id="tracker-now" class="home-tracker-cell home-tracker-cell--now"></div>
+          <div class="home-tracker-arrow"><i data-lucide="arrow-right"></i></div>
+          <div id="tracker-next" class="home-tracker-cell home-tracker-cell--next"></div>
+        </div>
+        <div id="countdown-slot" class="home-countdown"></div>
+      </section>
+
+      <!-- 2. Today in Quezon City: weather + class suspension -->
       <section id="home-status" class="portal-card home-status-card" aria-label="Today's weather and class suspension status"></section>
 
-      <!-- 2. Weekly Overview -->
+      <!-- 3. Weekly Overview -->
       <section class="home-week">
         <div class="home-week-head">
           <h2 class="home-kicker">Weekly overview</h2>
@@ -65,26 +85,6 @@
         </div>
         <div id="home-week-strip" class="home-week-strip"></div>
         <p class="home-week-hint">Tap a day to preview its classes.</p>
-      </section>
-
-      <!-- 3. Today's Schedule (bento) -->
-      <div class="home-today-head">
-        <h2 class="home-kicker">Today's schedule</h2>
-      </div>
-      <div id="today-grid" class="home-today-grid"></div>
-
-      <!-- 4. Class Tracker + Countdown -->
-      <section class="home-nownext">
-        <div class="home-nownext-head">
-          <h2 class="home-kicker">Class tracker</h2>
-          <span class="home-nownext-state" id="countdown-state-label">???</span>
-        </div>
-<div id="home-tracker" class="home-tracker">
-          <div id="tracker-now" class="home-tracker-cell home-tracker-cell--now"></div>
-          <div class="home-tracker-arrow"><i data-lucide="arrow-right"></i></div>
-          <div id="tracker-next" class="home-tracker-cell home-tracker-cell--next"></div>
-        </div>
-        <div id="countdown-slot" class="home-countdown"></div>
       </section>
 
       <footer class="caption" style="display:flex;justify-content:center;gap:18px;padding:8px 0 20px;">
@@ -108,6 +108,6 @@
     // Open-Meteo needs NO API key, so nothing sensitive is ever hardcoded here.
     window.QCU_STATUS_CONFIG = {};
   </script>
-  <script src="assets/js/status.js?v=39"></script>
+  <script src="assets/js/status.js?v=40"></script>
 </body>
 </html>

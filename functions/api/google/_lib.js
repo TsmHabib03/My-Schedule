@@ -127,8 +127,8 @@ export function oauthConfig(context) {
 }
 
 export function safeReturnTo(value) {
-  const path = String(value || "settings.html#google-integration");
-  if (/^(?:https?:|\/\/)/i.test(path) || path.includes("\\")) return "/settings.html#google-integration";
+  const path = String(value || "google.html#google-integration");
+  if (/^(?:https?:|\/\/)/i.test(path) || path.includes("\\")) return "/google.html#google-integration";
   return "/" + path.replace(/^\/+/, "");
 }
 

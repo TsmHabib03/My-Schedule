@@ -121,6 +121,7 @@ let fail = 0;
 const check = (cond, msg) => { if (!cond) { console.log("   ✗ " + msg); fail++; } };
 
 for (const { label, html } of results) {
+  const hasNotice = html.includes('class="notice ');
   const cls = (html.match(/class="notice (is-[a-z]+)"/) || [])[1] || "?";
   const chip = (html.match(/notice-status"><i[^>]*><\/i>([^<]*)</) || [])[1] || "?";
   const title = (html.match(/notice-verdict-title">([^<]*)</) || [])[1] || "?";
@@ -132,6 +133,14 @@ for (const { label, html } of results) {
   console.log("   doc     : " + (html.includes("notice-doc") ? "yes" : "no") +
               "  attest: " + (html.includes("notice-attest") ? "yes" : "no") +
               "  cta: " + (html.includes("feed-cta") ? "yes" : "no"));
+  check(html.includes("weather-switch"), "weather location switch missing");
+  check(html.includes('data-weather-view="user"') && html.includes('data-weather-view="campus"'), "weather location options missing");
+
+  // A verified quiet day intentionally has no notice markup at all.
+  if (label.startsWith("CLEAR")) {
+    check(!hasNotice, "clear day rendered a suspension notice");
+    continue;
+  }
 
   check(html.includes("notice-verdict-title"), "missing verdict title");
   check(title !== "?" && title.length > 3, "verdict title empty");
@@ -143,12 +152,6 @@ for (const { label, html } of results) {
     check(cls === "is-unknown", "feed failure did not render is-unknown");
     check(!html.includes("notice-attest"), "feed failure showed the clear-day attestation");
     check(!/in session/i.test(html), "feed failure implied classes are on");
-  }
-  if (label.startsWith("CLEAR")) {
-    check(cls === "is-clear", "clear day not is-clear");
-    check(html.includes("notice-attest"), "clear day missing source attestation");
-    check(!html.includes("notice-doc"), "clear day rendered an empty doc block");
-    check(/Classes are in session/.test(html), "clear day missing the verdict sentence");
   }
   if (label.startsWith("SUSPENDED")) {
     check(cls === "is-suspended", "suspended not is-suspended (got " + cls + ")");

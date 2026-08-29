@@ -35,6 +35,7 @@ const state = {
 
 const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const page = document.body.dataset.page || "home";
+const navPage = ["tasks", "notes"].includes(page) ? "workspace" : page;
 
 /* ── Utils ───────────────────────────────────────────── */
 function iconify() { if (window.lucide) window.lucide.createIcons(); }
@@ -232,8 +233,8 @@ function renderShell() {
     ["home",      "index.html",     "layout-dashboard", "Home"],
     ["campus-eta", "campus-eta.html", "navigation",      "ETA"],
 
-    ["tasks",     "tasks.html",     "check-square",     "Tasks"],
-    ["notes",     "notes.html",     "sticky-note",      "Notes"],
+    ["workspace", "workspace.html", "clipboard-list",   "Tasks & Notes"],
+    ["google",    "google.html",    "graduation-cap",   "Google"],
     ["settings",  "settings.html",  "settings",         "Settings"]
   ];
 
@@ -264,7 +265,7 @@ function renderShell() {
     nav.innerHTML = `
       <div>
         ${navItems.map(([key, href, icon, label]) => `
-          <a class="nav-item ${page === key ? "active" : ""}"
+          <a class="nav-item ${navPage === key ? "active" : ""}"
              href="${href}" aria-label="${label}">
             <i data-lucide="${icon}"></i>
             <span>${label}</span>
@@ -869,7 +870,6 @@ function closeModal() {
 
 /* ── Settings Page ───────────────────────────────────── */
 function renderSettings() {
-  window.QCUGoogleIntegration?.init();
   const notifToggle = document.getElementById("notifications-toggle");
   if (notifToggle) {
     notifToggle.checked = state.settings.notifications;
@@ -1389,6 +1389,7 @@ function tick() {
   if (page === "today")    renderToday();
   if (page === "tasks")    renderTasks();
   if (page === "notes")    renderNotes();
+  if (page === "workspace") { renderTasks(); renderNotes(); }
   // campus-eta page uses its own loop in eta.js
 }
 
@@ -1404,6 +1405,7 @@ async function init() {
 
   if (page === "buildings") renderBuildings();
   if (page === "settings")  renderSettings();
+  if (page === "google")    window.QCUGoogleIntegration?.init();
 
   /* ── Modal close handlers ─────────────────────────── */
   ["building-modal", "day-modal", "task-modal", "note-modal"].forEach(id => {
@@ -1443,13 +1445,17 @@ async function init() {
     });
   }
 
-  if (!document.querySelector(`[data-page="tasks"] .fab`)) {
+  if (!document.querySelector(`[data-page="tasks"] .fab, [data-page="workspace"] .fab`)) {
     const tasksFab = document.createElement("button");
     tasksFab.className = "fab";
     tasksFab.innerHTML = '<i data-lucide="plus"></i>';
-    tasksFab.setAttribute("aria-label", "Add task");
-    tasksFab.addEventListener("click", () => openTaskModal(null));
-    document.querySelector(`[data-page="tasks"] .page-container`)?.appendChild(tasksFab);
+    tasksFab.setAttribute("aria-label", "Add task or note");
+    tasksFab.addEventListener("click", () => {
+      const active = document.querySelector("[data-workspace-view].is-active")?.dataset.workspaceView || "tasks";
+      if (active === "notes") openNoteModal(null);
+      else openTaskModal(null);
+    });
+    document.querySelector(`[data-page="tasks"] .page-container, [data-page="workspace"] .page-container`)?.appendChild(tasksFab);
   }
 
   document.getElementById("task-search")?.addEventListener("input", renderTasks);
@@ -1488,13 +1494,38 @@ async function init() {
     });
   }
 
-  if (!document.querySelector(`[data-page="notes"] .fab`)) {
+  if (page === "notes" && !document.querySelector(`[data-page="notes"] .fab`)) {
     const notesFab = document.createElement("button");
     notesFab.className = "fab";
     notesFab.innerHTML = '<i data-lucide="plus"></i>';
     notesFab.setAttribute("aria-label", "Add note");
     notesFab.addEventListener("click", () => openNoteModal(null));
     document.querySelector(`[data-page="notes"] .page-container`)?.appendChild(notesFab);
+  }
+
+  if (page === "workspace") {
+    const workspace = document.querySelector("[data-page=workspace]");
+    const buttons = workspace?.querySelectorAll("[data-workspace-view]") || [];
+    const panels = workspace?.querySelectorAll("[data-workspace-panel]") || [];
+    const setWorkspaceView = (view, updateUrl = true) => {
+      buttons.forEach(button => {
+        const active = button.dataset.workspaceView === view;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      panels.forEach(panel => {
+        const active = panel.dataset.workspacePanel === view;
+        panel.hidden = !active;
+        panel.classList.toggle("is-active", active);
+      });
+      if (updateUrl) history.replaceState({}, "", `${location.pathname}#${view}`);
+      renderTasks();
+      renderNotes();
+      iconify();
+    };
+    buttons.forEach(button => button.addEventListener("click", () => setWorkspaceView(button.dataset.workspaceView)));
+    const initialView = location.hash === "#notes" ? "notes" : "tasks";
+    setWorkspaceView(initialView, false);
   }
 
   document.getElementById("note-search")?.addEventListener("input", renderNotes);

@@ -11,6 +11,7 @@
   let account = null;
   let syncing = false;
   let autoRefreshTimer = null;
+  let updateView = "new";
 
   // True when the page is served by a plain static server (Live Server) and API
   // calls are being redirected to the project's own dev server on port 8788.
@@ -159,7 +160,7 @@
           ${mode === "unconfigured" ? `<p class="google-inline-error">Google OAuth environment variables are not configured on this deployment.${diagnostic && diagnostic.missing && diagnostic.missing.length ? ` Missing: ${esc(diagnostic.missing.join(", "))}.` : ""}${diagnostic && diagnostic.invalid && diagnostic.invalid.length ? ` Invalid: ${esc(diagnostic.invalid.join(", "))}.` : ""}</p>` : ""}
           ${isServerUnavailable ? `<p class="google-inline-error">This preview is serving static HTML only. Start My-Schedule with Cloudflare Pages Functions before connecting Google.</p>` : ""}
           ${mode === "idle" ? `
-            <a class="google-primary-button" href="${apiPath("/api/google/connect?return=settings.html%23google-integration")}">
+            <a class="google-primary-button" href="${apiPath("/api/google/connect?return=google.html%23google-integration")}">
               <i data-lucide="log-in"></i>
               Connect Google Account
             </a>` : isServerUnavailable || mode === "error" || mode === "unconfigured" ? `
@@ -231,7 +232,7 @@
           ${account.needsReauthorization ? `
             <div class="google-renewal">
               <div><strong>Authorization renewal required</strong><span>Your Google connection has expired or was revoked.</span></div>
-              <a class="google-primary-button" href="${apiPath(`/api/google/connect?${permissions.gmail ? "gmail=1&" : ""}return=settings.html%23google-integration`)}"><i data-lucide="key-round"></i>Reconnect Google</a>
+              <a class="google-primary-button" href="${apiPath(`/api/google/connect?${permissions.gmail ? "gmail=1&" : ""}return=google.html%23google-integration`)}"><i data-lucide="key-round"></i>Reconnect Google</a>
             </div>` : ""}
           <div class="google-account-actions">
             <button class="google-secondary-button" type="button" data-google-action="refresh" ${syncing ? "disabled" : ""}><i data-lucide="refresh-cw"></i>${syncing ? "Refreshing" : "Refresh Now"}</button>
@@ -257,6 +258,7 @@
           ${item.isNew ? `<span class="google-new-badge">New</span>` : `<span class="google-source-code">${item.source === "gmail" ? "GMAIL" : "CLASSROOM"}</span>`}
         </header>
         <div class="google-update-body">
+          <div class="google-update-tags"><span class="google-update-type-chip type-${esc(item.type)}"><i data-lucide="${meta.icon}"></i>${esc(meta.label)}</span>${item.isNew ? '<span class="google-update-new-chip"><i data-lucide="sparkles"></i>New</span>' : ''}</div>
           <p class="google-update-course">${esc(item.courseName || "Google Classroom")}</p>
           <h3>${esc(item.title || "Classroom update")}</h3>
           ${item.description && item.description !== item.title ? `<p class="google-update-description">${esc(item.description)}</p>` : ""}
@@ -276,8 +278,25 @@
   function renderUpdates() {
     if (!ui.updatesList || !account || !account.connected) return;
     const updates = Array.isArray(cache.updates) ? cache.updates : [];
+    populateUpdateSubjectFilter();
+    const search = (ui.updateSearch?.value || "").trim().toLowerCase();
+    const subject = ui.updateSubject?.value || "all";
+    const type = ui.updateType?.value || "all";
+    const newOnly = updateView === "new" || Boolean(ui.updateNew?.checked);
+    const filtered = updates.filter(item => {
+      const haystack = [item.title, item.description, item.author, item.courseName].filter(Boolean).join(" ").toLowerCase();
+      if (search && !haystack.includes(search)) return false;
+      if (subject !== "all" && String(item.courseName || "") !== subject) return false;
+      if (type !== "all" && item.type !== type) return false;
+      if (newOnly && !item.isNew) return false;
+      return true;
+    });
     const newCount = updates.filter(item => item.isNew).length;
-    ui.count.textContent = `${updates.length} update${updates.length === 1 ? "" : "s"}${newCount ? `, ${newCount} new` : ""}`;
+    ui.count.textContent = filtered.length === updates.length && updateView === "all"
+      ? `${updates.length} update${updates.length === 1 ? "" : "s"}${newCount ? `, ${newCount} new` : ""}`
+      : updateView === "new" && !search && subject === "all" && type === "all" && !ui.updateNew?.checked
+        ? `${filtered.length} new`
+        : `${filtered.length} of ${updates.length} updates`;
     ui.offline.hidden = navigator.onLine;
 
     if (syncing && !updates.length) {
@@ -296,8 +315,17 @@
           <span>Last checked: ${cache.checkedAt ? esc(formatDate(cache.checkedAt)) : "Not yet checked"}</span>
           <button class="google-secondary-button" type="button" data-google-action="refresh" ${syncing || !navigator.onLine ? "disabled" : ""}><i data-lucide="refresh-cw"></i>Refresh</button>
         </div>`;
+    } else if (!filtered.length) {
+      ui.updatesList.innerHTML = `
+        <div class="google-empty-state google-empty-state--filtered">
+          <i data-lucide="${updateView === "new" ? "sparkles" : "filter-x"}"></i>
+          <h3>${updateView === "new" ? "No new updates" : "No matching updates"}</h3>
+          <p>${updateView === "new" ? "You are all caught up. View all updates to review older activity." : "Try a different subject, type, or search term."}</p>
+          <button class="google-secondary-button" type="button" data-google-action="clear-filters"><i data-lucide="rotate-ccw"></i>Clear filters</button>
+          ${updateView === "new" ? '<button class="google-secondary-button" type="button" data-google-action="set-view-all"><i data-lucide="layers-3"></i>View all updates</button>' : ''}
+        </div>`;
     } else {
-      ui.updatesList.innerHTML = updates.map(updateCard).join("");
+      ui.updatesList.innerHTML = filtered.map(updateCard).join("");
     }
     iconify();
   }
@@ -316,6 +344,32 @@
     cache.updates = merged;
     cache.knownIds = Array.from(new Set([...known, ...merged.map(item => item.id)])).slice(-250);
     return newlyDetected;
+  }
+
+  function populateUpdateSubjectFilter() {
+    if (!ui.updateSubject) return;
+    const current = ui.updateSubject.value || "all";
+    const subjects = Array.from(new Set((cache.updates || []).map(item => String(item.courseName || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    ui.updateSubject.innerHTML = '<option value="all">All Subjects</option>' + subjects.map(subject => `<option value="${esc(subject)}">${esc(subject)}</option>`).join("");
+    ui.updateSubject.value = subjects.includes(current) ? current : "all";
+  }
+
+  function clearUpdateFilters() {
+    if (ui.updateSearch) ui.updateSearch.value = "";
+    if (ui.updateSubject) ui.updateSubject.value = "all";
+    if (ui.updateType) ui.updateType.value = "all";
+    if (ui.updateNew) ui.updateNew.checked = false;
+    renderUpdates();
+  }
+
+  function setUpdateView(view) {
+    updateView = view === "all" ? "all" : "new";
+    document.querySelectorAll("[data-google-view]").forEach(button => {
+      const active = button.dataset.googleView === updateView;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    renderUpdates();
   }
 
   function notifyNewUpdates(items) {
@@ -364,7 +418,7 @@
     const previous = { ...(account.preferences || {}) };
     const next = { ...previous, [key]: input.checked };
     if (key === "gmail" && input.checked && !(account.permissions && account.permissions.gmail)) {
-      window.location.href = apiPath("/api/google/connect?gmail=1&return=settings.html%23google-integration");
+      window.location.href = apiPath("/api/google/connect?gmail=1&return=google.html%23google-integration");
       return;
     }
     account.preferences = next;
@@ -483,7 +537,7 @@
         // API calls are proxied to port 8788, that almost always means the
         // project's dev server simply isn't running.
         if (usingProxiedApi()) {
-          showFeedback("The API server on port 8788 isn't responding. Run `npm run dev` in the project folder, then reload this page (or open http://127.0.0.1:8788/settings.html#google-integration directly).", "error");
+          showFeedback("The API server on port 8788 isn't responding. Run `npm run dev` in the project folder, then reload this page (or open http://127.0.0.1:8788/google.html#google-integration directly).", "error");
         } else {
           showFeedback("We couldn't check your Google connection. Please try again.", "error");
         }
@@ -497,13 +551,19 @@
       if (action && action.dataset.googleAction === "refresh") syncUpdates(true);
       if (action && action.dataset.googleAction === "disconnect") disconnect();
       if (action && action.dataset.googleAction === "retry-status") loadStatus();
+      if (action && action.dataset.googleAction === "clear-filters") clearUpdateFilters();
+      if (action && action.dataset.googleAction === "set-view-all") setUpdateView("all");
+      const viewButton = event.target.closest("[data-google-view]");
+      if (viewButton) setUpdateView(viewButton.dataset.googleView);
       const update = event.target.closest("[data-google-open-update]");
       if (update) markRead(update.dataset.googleOpenUpdate);
     });
     document.getElementById("google-integration").addEventListener("change", event => {
       const input = event.target.closest("[data-google-pref]");
       if (input) savePreference(input);
+      if (event.target.closest("#google-update-subject, #google-update-type, #google-update-new")) renderUpdates();
     });
+    document.getElementById("google-update-search")?.addEventListener("input", renderUpdates);
     window.addEventListener("online", () => { showFeedback("", "info"); loadStatus(); });
     window.addEventListener("offline", () => { showFeedback("Offline - showing last synced updates.", "info"); renderUpdates(); });
   }
@@ -517,6 +577,10 @@
     ui.updatesList = document.getElementById("google-updates-list");
     ui.count = document.getElementById("google-update-count");
     ui.offline = document.getElementById("google-offline-notice");
+    ui.updateSearch = document.getElementById("google-update-search");
+    ui.updateSubject = document.getElementById("google-update-subject");
+    ui.updateType = document.getElementById("google-update-type");
+    ui.updateNew = document.getElementById("google-update-new");
     bindEvents();
     handleOAuthResult();
     loadStatus();

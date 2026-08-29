@@ -33,7 +33,8 @@
   "use strict";
 
   var CFG = Object.assign({
-    lat: 14.7011, lon: 121.0330, place: "Quezon City",
+    // QCU San Bartolome main campus coordinates, shared with the flood proxy.
+    lat: 14.7001, lon: 121.0343, place: "QCU San Bartolome",
     weatherTtlMin: 15,
     suspFeed: "/api/suspensions",
     suspFeedFallback: "data/suspensions.json",
@@ -44,6 +45,7 @@
     // so the client falls back to the rainfall-derived estimate — never a
     // fabricated "no flood risk".
     floodFeed: "/api/flood",
+    floodFeedFallback: "data/flood.json",
     debug: false,
     /* Time windows (Asia/Manila, 24h "HH:MM") — single source of truth,
        no scattered magic numbers. Afternoon spans noon→6pm. */
@@ -61,6 +63,12 @@
   if (!root) return; // Guard: only run on the Home page.
 
   var CACHE_KEY = "qcu-weather-cache";
+  var WEATHER_VIEW_KEY = "qcu-weather-view";
+  var weatherView = "campus";
+  try {
+    var savedWeatherView = localStorage.getItem(WEATHER_VIEW_KEY);
+    if (savedWeatherView === "user" || savedWeatherView === "campus") weatherView = savedWeatherView;
+  } catch (e) { /* local storage may be unavailable */ }
 
   function dbg() {
     if (CFG.debug && window.console && console.log)
@@ -521,7 +529,7 @@
     } catch (e) { /* ignore cache errors */ }
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat + "&longitude=" + loc.lon +
       "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation" +
-      "&hourly=precipitation_probability&timezone=Asia%2FManila&forecast_days=1";
+      "&hourly=precipitation_probability&timezone=Asia%2FManila&forecast_days=2";
     return fetch(url).then(function (r) {
       if (!r.ok) throw new Error("weather HTTP " + r.status);
       return r.json();
@@ -530,8 +538,17 @@
       var pop = null;
       try {
         var hrs = j.hourly && j.hourly.time || [], probs = j.hourly && j.hourly.precipitation_probability || [];
-        var nowH = new Date().toISOString().slice(0, 13);
-        for (var i = 0; i < hrs.length; i++) { if (String(hrs[i]).slice(0, 13) >= nowH) { pop = probs[i]; break; } }
+        // API timestamps use Asia/Manila. Comparing against UTC ISO time shifts
+        // the selected hour and makes rain chance inaccurate by eight hours.
+        var apiNow = String(cur.time || "").slice(0, 13);
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(apiNow)) {
+          apiNow = new Intl.DateTimeFormat("sv-SE", {
+            timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false
+          }).format(new Date()).replace(" ", "T");
+        }
+        for (var i = 0; i < hrs.length; i++) {
+          if (String(hrs[i]).slice(0, 13) >= apiNow) { pop = probs[i]; break; }
+        }
         if (pop == null && probs.length) pop = probs[0];
       } catch (e) { /* ignore */ }
       var data = {
@@ -573,20 +590,51 @@
   // empty / upstream error / network failure). A failed fetch NEVER fabricates:
   // deriveFlood then falls back to the honest rainfall-derived estimate.
   function fetchFlood() {
-    return fetch(CFG.floodFeed, { cache: "no-store" }).then(function (r) {
+    var primaryUrl = CFG.floodFeed;
+    return fetch(primaryUrl, { cache: "no-store" }).catch(function (e) {
+      if (!CFG.floodFeedFallback) throw e;
+      return fetch(CFG.floodFeedFallback, { cache: "no-store" }).then(function (fallbackResponse) {
+        if (!fallbackResponse.ok) throw new Error("scheduled flood HTTP " + fallbackResponse.status);
+        return fallbackResponse;
+      });
+    }).then(function (r) {
       if (!r.ok) throw new Error("flood HTTP " + r.status);
       return r.json();
     }).then(function (j) {
-      if (!j || j.status !== "OK" || !j.severity) return undefined;
+      if (!j || j.status !== "OK" || !(j.severity || j.riskLevel)) {
+        if (primaryUrl !== CFG.floodFeedFallback && CFG.floodFeedFallback) {
+          return fetch(CFG.floodFeedFallback, { cache: "no-store" }).then(function (fallbackResponse) {
+            if (!fallbackResponse.ok) throw new Error("scheduled flood HTTP " + fallbackResponse.status);
+            return fallbackResponse.json();
+          }).then(function (fallback) {
+            var fallbackSeverity = fallback && (fallback.severity || fallback.riskLevel);
+            if (!fallback || fallback.status !== "OK" || !fallbackSeverity || fallbackSeverity === "UNKNOWN") {
+              throw new Error("scheduled flood severity unavailable");
+            }
+            return {
+              provider: "google",
+              severity: fallbackSeverity,
+              trend: fallback.trend || (fallback.waterLevel && fallback.waterLevel.trend) || null,
+              issuedAt: fallback.issuedAt || fallback.publishedAt || null,
+              gaugeId: fallback.gaugeId || (fallback.gauge && fallback.gauge.id) || null,
+              km: typeof fallback.km === "number" ? fallback.km : (fallback.gauge && typeof fallback.gauge.distanceKm === "number" ? fallback.gauge.distanceKm : null),
+              source: fallback.source || "Google Flood Hub",
+              sourceUrl: fallback.sourceUrl || "https://sites.research.google/floods/"
+            };
+          });
+        }
+        return undefined;
+      }
+      var severity = j.severity || j.riskLevel;
       return {
         provider: "google",
-        severity: j.severity,            // already our internal level
-        trend: j.trend || null,          // RISING | FALLING | STABLE
-        issuedAt: j.issuedAt || null,
-        gaugeId: j.gaugeId || null,
-        km: typeof j.km === "number" ? j.km : null,
+        severity: severity,
+        trend: j.trend || (j.waterLevel && j.waterLevel.trend) || null,
+        issuedAt: j.issuedAt || j.publishedAt || null,
+        gaugeId: j.gaugeId || (j.gauge && j.gauge.id) || null,
+        km: typeof j.km === "number" ? j.km : (j.gauge && typeof j.gauge.distanceKm === "number" ? j.gauge.distanceKm : null),
         source: j.source || "Google Flood Forecasting",
-        sourceUrl: j.sourceUrl || "https://developers.google.com/flood-forecasting"
+        sourceUrl: j.sourceUrl || "https://sites.research.google/floods/"
       };
     }).catch(function (e) { dbg("google flood unavailable → rainfall-derived fallback", e); return undefined; });
   }
@@ -925,6 +973,10 @@
   //   • feed present, nothing active → confident all-clear + source attestation
   //   • feed failure (UNKNOWN)     → honest unavailable, never "may pasok"
   function announcementFeedHTML(st) {
+    // A verified quiet day does not need an alarm-style notice. Keep genuine
+    // announcements that do not cover QCU visible so the explanation remains
+    // available to the student.
+    if (st.status === STATUS.NOT_SUSPENDED && !st.title) return "";
     var m = statusMeta(st.status);
     var v = verdictHTML(st);
     return '' +
@@ -1009,7 +1061,7 @@
       '<button class="loc-enable-btn" type="button" data-action="use-location"><i data-lucide="navigation"></i>Use my location</button></div>';
   }
 
-  // One dual-location micro-card. `opts.geo` renders the geolocation body (My
+  // One location micro-card. `opts.geo` renders the geolocation body (My
   // Location, no fix); otherwise the weather segment + flood advisory.
   function microCardHTML(title, sub, view, opts) {
     opts = opts || {};
@@ -1031,11 +1083,22 @@
   }
 
   function locationsGridHTML(views) {
-    var myCard = views.hasUserFix
-      ? microCardHTML("My Location", null, views.user, { icon: "navigation" })
-      : microCardHTML("My Location", null, null, { geo: true, geoState: geoState, icon: "navigation" });
-    var campusCard = microCardHTML("QCU Campus", "San Bartolome", views.campus, { icon: "school" });
-    return '<div class="loc-grid">' + myCard + campusCard + '</div>';
+    var isUser = weatherView === "user";
+    var selectedCard = isUser
+      ? (views.hasUserFix
+        ? microCardHTML("My Location", null, views.user, { icon: "navigation" })
+        : microCardHTML("My Location", null, null, { geo: true, geoState: geoState, icon: "navigation" }))
+      : microCardHTML("QCU Campus", "San Bartolome", views.campus, { icon: "school" });
+    return '<div class="weather-module">' +
+      '<div class="weather-module-head">' +
+        '<div><span class="weather-module-kicker">Live conditions</span><h2 class="weather-module-title">Weather</h2></div>' +
+        '<div class="weather-switch" role="tablist" aria-label="Choose weather location">' +
+          '<button class="weather-switch-btn' + (isUser ? ' is-active' : '') + '" type="button" role="tab" aria-selected="' + (isUser ? 'true' : 'false') + '" data-weather-view="user"><i data-lucide="navigation" aria-hidden="true"></i><span>My Location</span></button>' +
+          '<button class="weather-switch-btn' + (!isUser ? ' is-active' : '') + '" type="button" role="tab" aria-selected="' + (!isUser ? 'true' : 'false') + '" data-weather-view="campus"><i data-lucide="school" aria-hidden="true"></i><span>QCU Campus</span></button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="weather-module-body">' + selectedCard + '</div>' +
+    '</div>';
   }
 
   function compose(st, views) {
@@ -1075,8 +1138,21 @@
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   }
 
+  var lastStatus = null, lastViews = null;
+
   // ONE delegated handler on the root (root.innerHTML is replaced every paint).
   root.addEventListener("click", function (e) {
+    var weatherButton = e.target && e.target.closest && e.target.closest("[data-weather-view]");
+    if (weatherButton) {
+      e.preventDefault();
+      var nextView = weatherButton.getAttribute("data-weather-view");
+      if (nextView === "user" || nextView === "campus") {
+        weatherView = nextView;
+        try { localStorage.setItem(WEATHER_VIEW_KEY, weatherView); } catch (err) { /* ignore */ }
+        if (lastStatus && lastViews) paint(compose(lastStatus, lastViews));
+      }
+      return;
+    }
     var btn = e.target && e.target.closest && e.target.closest("[data-action='use-location']");
     if (btn) { e.preventDefault(); requestUserLocation(); }
   });
@@ -1097,17 +1173,21 @@
       // Institution-centric: campus weather is the advisory input (advisory only —
       // it can never flip the official status).
       var st = getQcuSuspensionStatus(list, schedule, campus.risk);
-      paint(compose(st, { user: user, campus: campus, hasUserFix: hasUserFix }));
+      lastStatus = st;
+      lastViews = { user: user, campus: campus, hasUserFix: hasUserFix };
+      paint(compose(lastStatus, lastViews));
     }).catch(function (e) {
       dbg("refresh error", e);
       // Even total failure must read as honest UNKNOWN — never "no suspension".
       var st = getQcuSuspensionStatus(undefined, [], null);
-      paint(compose(st, { user: null, campus: { wx: null, flood: undefined, risk: null }, hasUserFix: hasUserFix }));
+      lastStatus = st;
+      lastViews = { user: null, campus: { wx: null, flood: undefined, risk: null }, hasUserFix: hasUserFix };
+      paint(compose(lastStatus, lastViews));
     });
   }
 
-  // Loading skeleton, then first paint. Mirrors the real layout (two location
-  // cards + notice with a verdict row) so the panel settles instead of jumping.
+  // Loading skeleton, then first paint. Mirrors the real layout so the panel
+  // settles instead of jumping while the feeds resolve.
   paint('<div class="status-grid">' +
         '<div class="loc-grid">' +
           '<div class="wx-panel wx-loading"><span class="wx-status">Loading…</span></div>' +
@@ -1136,4 +1216,3 @@
     return getQcuSuspensionStatus(list, schedule, weatherRisk);
   };
 })();
-

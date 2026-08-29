@@ -19,7 +19,7 @@
  */
 
 const SOURCE_NAME = "Google Flood Forecasting";
-const SOURCE_URL = "https://developers.google.com/flood-forecasting";
+const SOURCE_URL = "https://sites.research.google/floods/";
 const API_BASE = "https://floodforecasting.googleapis.com/v1";
 // QCU main campus — 673 Quirino Highway, Barangay San Bartolome, Novaliches.
 // Matches assets/js/status.js (lat/lon) and assets/js/eta.js (lon-first).
@@ -75,7 +75,9 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestGet(context) {
-  const key = context.env && context.env.GOOGLE_FLOOD_KEY;
+  // Accept both names used by the Pages deployment and scheduled updater.
+  const key = (context.env && context.env.GOOGLE_FLOOD_KEY) ||
+    (context.env && context.env.GOOGLE_FLOOD_API_KEY);
   const nowIso = new Date().toISOString();
 
   if (!key) {
@@ -86,7 +88,7 @@ export async function onRequestGet(context) {
       checkedAt: nowIso,
       source: SOURCE_NAME,
       sourceUrl: SOURCE_URL,
-      error: "GOOGLE_FLOOD_KEY is not set"
+      error: "GOOGLE_FLOOD_KEY (or GOOGLE_FLOOD_API_KEY) is not set"
     }, 503);
   }
 
