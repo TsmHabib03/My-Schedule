@@ -1,994 +1,624 @@
 /* ============================================================
    QCU Student Portal — eta.js
-   Live Campus ETA using MapLibre GL JS + TomTom Traffic-Aware Routing
+   QCity Bus · Libreng Sakay (Route 4) information panel + map
+
+   This page is deliberately SCHEDULE-BASED. There is no public
+   real-time feed for QCity Bus, so nothing here estimates, predicts,
+   or counts down to an arrival. Every value comes from
+   data/qcity-bus.json, and any field the data marks unverified renders
+   as an explicit "unavailable" state rather than a plausible guess.
    ============================================================ */
 
-// Verified QCU Main Campus Coordinates: 673 Quirino Highway, San Bartolome, Novaliches, Quezon City
-const QCU_COORDS = [121.0343, 14.7001]; // [Longitude, Latitude]
+const QCU_COORDS = [121.0343, 14.7001]; // 673 Quirino Highway, San Bartolome, Novaliches
+const BUS_DATA_URL = "data/qcity-bus.json";
+const CORRIDOR_URL = "data/route4-corridor.json";
 
-// TomTom Routing API Configuration
-// API key should be restricted to this domain in TomTom Developer Portal
-const ROUTE_API = "/api/route";
-const TOMTOM_BASE = 'https://api.tomtom.com/routing/1/calculateRoute';
-const TOMTOM_TRAFFIC_STYLE = 'relative'; // 'relative' | 'relative-delay' | 'absolute' | 'disabled'
+const DAY_KEYS = ["weekdays", "saturday", "sunday"];
+const DAY_LABELS = { weekdays: "Weekdays", saturday: "Saturday", sunday: "Sunday" };
 
 let map = null;
-let userMarker = null;
-let qcuMarker = null;
-let watchId = null;
-let lastCoords = null;
-let lastTimestamp = 0;
-let lastAccuracy = null;
-let isTracking = true;
-let isUserPanning = false;
-let hasFirstFix = false;
-let lastRouteTime = 0;
+let busData = null;
+let corridor = null;
+let activeDay = "weekdays";
 
-const ROUTE_THROTTLE_MS = 15000; // 15s throttle between automatic route queries
-const ROUTE_DEBOUNCE_METERS = 80; // Recalculate route if user moved > 80m
+/* ── Helpers ─────────────────────────────────────────────── */
 
-// Schedule & Traffic State
-let scheduleData = null;
-let lastETAMinutes = null;
-let lastRouteData = null; // Store full route response for traffic details
-let lastUpdatedAt = null; // Date of the most recent successful route render
-let refreshTimer = null;  // Interval id for background traffic refresh
-
-/**
- * Load student schedule from data/schedule.json
- */
-async function loadSchedule() {
-  try {
-    const res = await fetch('data/schedule.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    scheduleData = await res.json();
-  } catch (err) {
-    console.warn('Schedule load failed:', err);
-    scheduleData = null;
-  }
-}
-
-/**
- * Day name → short form mapping for schedule matching
- */
-const DAY_MAP = {
-  0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday',
-  4: 'Thursday', 5: 'Friday', 6: 'Saturday'
-};
-
-/**
- * Parse HH:MM time string to minutes since midnight
- */
-function timeToMinutes(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
-}
-
-/**
- * Find the next upcoming class from scheduleData for the given Date.
- * Returns { subject, course, start, end, building, room } or null.
- * Handles: today's remaining classes, tomorrow's first class (if after midnight).
- */
-function getNextClass(date) {
-  if (!scheduleData || !Array.isArray(scheduleData) || scheduleData.length === 0) return null;
-
-  const dayName = DAY_MAP[date.getDay()];
-  const nowMinutes = date.getHours() * 60 + date.getMinutes();
-
-  // Today's classes (filter out noClasses days)
-  const todayClasses = scheduleData.filter(c => c.day === dayName && !c.noClasses);
-
-  // Find next class today (start > now, give 5min grace for late arrivals)
-  const nextToday = todayClasses
-    .filter(c => timeToMinutes(c.start) > nowMinutes - 5)
-    .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))[0];
-
-  if (nextToday) return nextToday;
-
-  // No more classes today → find first class tomorrow
-  const dayOrder = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  for (let i = 1; i <= 7; i++) {
-    const nextDayName = dayOrder[(date.getDay() + i) % 7];
-    const nextDayClasses = scheduleData
-      .filter(c => c.day === nextDayName && !c.noClasses)
-      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-    if (nextDayClasses.length > 0) return nextDayClasses[0];
-  }
-  return null;
-}
-
-/**
- * Configurable tuning for ETA display and next-class verdict thresholds.
- * Buffers are minutes of margin between estimated arrival and class start.
- *
- * Honesty policy: we NEVER fabricate a live-traffic figure. Real traffic
- * comes only from TomTom (free-flow vs traffic-aware durations). When only
- * base routing (OSRM) or a straight-line estimate is available, traffic is
- * reported as UNAVAILABLE — we do not invent a delay multiplier.
- */
-const ETA_TUNING = {
-  onTimeBufferMin: 15,   // arrival ≥ 15 min before start → ON TIME
-  tightBufferMin: 5,     // arrival ≥ 5 min before start  → TIGHT
-  // 0 ≤ margin < tightBufferMin → AT RISK ; margin < 0 → LATE
-  periodicRefreshMs: 90000 // background traffic refresh cadence while tracking (not per-second)
-};
-
-/**
- * Generates a 32-point geodesic circle polygon in GeoJSON format.
- * Scales accurately with real-world ground meters at any map zoom level.
- */
-function createGeoJSONCircle(center, radiusInMeters, points = 32) {
-  if (!center || !radiusInMeters || radiusInMeters <= 0) {
-    return { type: 'Polygon', coordinates: [[]] };
-  }
-  const [lon, lat] = center;
-  const km = radiusInMeters / 1000;
-  const coords = [];
-  const distanceX = km / (111.32 * Math.cos((lat * Math.PI) / 180));
-  const distanceY = km / 110.574;
-
-  for (let i = 0; i < points; i++) {
-    const theta = (i / points) * (2 * Math.PI);
-    const x = distanceX * Math.cos(theta);
-    const y = distanceY * Math.sin(theta);
-    coords.push([lon + x, lat + y]);
-  }
-  coords.push(coords[0]); // Close polygon loop
-  return {
-    type: 'Polygon',
-    coordinates: [coords]
-  };
-}
-
-/**
- * Initialize MapLibre GL JS and map layers
- */
-function initETA() {
-  if (map) return;
-
-  // Initialize MapLibre Map (Light / OpenFreeMap Liberty style)
-  map = new maplibregl.Map({
-    container: 'eta-map',
-    style: 'https://tiles.openfreemap.org/styles/liberty',
-    center: QCU_COORDS,
-    zoom: 14,
-    attributionControl: false
-  });
-
-  map.addControl(new maplibregl.AttributionControl({ compact: true }));
-  map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
-
-  // Custom LocateMe control — floating button on the map
-  const locateMeControl = document.createElement('div');
-  locateMeControl.className = 'maplibregl-ctrl maplibregl-ctrl-group eta-locate-control';
-  locateMeControl.innerHTML = `<button type="button" title="Locate Me" aria-label="Recenter map on my location"><i data-lucide="locate"></i></button>`;
-  locateMeControl.querySelector('button').addEventListener('click', () => {
-    reacquireLocation();
-  });
-  map.getContainer().appendChild(locateMeControl);
-
-  // Detect user map interaction to avoid unwanted auto-panning
-  map.on('dragstart', () => { isUserPanning = true; });
-  map.on('rotatestart', () => { isUserPanning = true; });
-  map.on('pitchstart', () => { isUserPanning = true; });
-  map.on('touchstart', () => { isUserPanning = true; });
-  map.on('wheel', () => { isUserPanning = true; });
-
-  // Add QCU Destination Pin Marker (Anchored at bottom tip)
-  const qcuContainer = document.createElement('div');
-  qcuContainer.className = 'qcu-marker-container';
-  qcuContainer.innerHTML = `
-    <div class="qcu-marker-pin" title="Quezon City University — San Bartolome Main Campus"></div>
-    <span class="qcu-marker-label">QCU Campus</span>
-  `;
-  qcuMarker = new maplibregl.Marker({
-    element: qcuContainer,
-    anchor: 'bottom'
-  })
-    .setLngLat(QCU_COORDS)
-    .addTo(map);
-
-  // Add User Location Marker (Anchored at center of circle)
-  const userContainer = document.createElement('div');
-  userContainer.className = 'user-marker-container';
-  userContainer.innerHTML = `
-    <div class="user-marker-pulse"></div>
-    <div class="user-marker-core" title="Your current device location"></div>
-  `;
-  userMarker = new maplibregl.Marker({
-    element: userContainer,
-    anchor: 'center'
-  }).setLngLat(QCU_COORDS);
-
-  // Load student schedule for class-status comparison
-  loadSchedule();
-
-  map.on('load', () => {
-    // 1. Accuracy Circle Source & Layers (Filled Polygon + Outline)
-    map.addSource('accuracy-source', {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'Polygon', coordinates: [[]] }
-      }
-    });
-
-    map.addLayer({
-      id: 'accuracy-fill',
-      type: 'fill',
-      source: 'accuracy-source',
-      paint: {
-        'fill-color': '#005BAC',
-        'fill-opacity': 0.12
-      }
-    });
-
-    map.addLayer({
-      id: 'accuracy-line',
-      type: 'line',
-      source: 'accuracy-source',
-      paint: {
-        'line-color': '#005BAC',
-        'line-width': 1.5,
-        'line-opacity': 0.45
-      }
-    });
-
-    // 2. Active Route Source & Layers
-    map.addSource('route', {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates: [] }
-      }
-    });
-
-    // Route casing for high contrast on light map
-    map.addLayer({
-      id: 'route-casing',
-      type: 'line',
-      source: 'route',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#0A4DA2',
-        'line-width': 7,
-        'line-opacity': 0.3
-      }
-    });
-
-    map.addLayer({
-      id: 'route-layer',
-      type: 'line',
-      source: 'route',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#005BAC',
-        'line-width': 4.5,
-        'line-opacity': 0.95
-      }
-    });
-
-    // Start continuous tracking
-    startTracking();
-  });
-
-  // UI Event Listeners
-  document.getElementById('btn-eta-locate')?.addEventListener('click', () => {
-    reacquireLocation();
-  });
-
-  document.getElementById('btn-eta-toggle')?.addEventListener('click', (e) => {
-    const btn = e.currentTarget;
-    if (isTracking) {
-      stopTracking();
-      isTracking = false;
-      btn.innerHTML = '<i data-lucide="play"></i> Resume Tracking';
-      btn.style.color = 'var(--blue)';
-      updateStatus("Tracking paused", "error");
-    } else {
-      startTracking();
-      isTracking = true;
-      btn.innerHTML = '<i data-lucide="pause"></i> Stop Tracking';
-      btn.style.color = 'var(--muted)';
-      updateStatus("Resuming location…", "active");
-    }
-    if (window.iconify) window.iconify();
-    else if (window.lucide) window.lucide.createIcons();
-  });
-
-  // Class panel toggle
-  document.getElementById('eta-class-toggle')?.addEventListener('click', (e) => {
-    const panel = document.getElementById('eta-class-banner');
-    const toggleBtn = document.getElementById('eta-class-toggle');
-    if (panel && toggleBtn) {
-      const isCollapsed = panel.classList.toggle('collapsed');
-      toggleBtn.classList.toggle('collapsed', isCollapsed);
-      toggleBtn.setAttribute('aria-label', isCollapsed ? 'Expand class panel' : 'Collapse class panel');
-      toggleBtn.title = isCollapsed ? 'Expand' : 'Collapse';
-      if (window.lucide) window.lucide.createIcons();
-    }
-  });
-}
-
-/**
- * Update top-left status strip message and indicator dot
- */
-function updateStatus(text, dotState) {
-  const textEl = document.getElementById('eta-status-text');
-  const dotEl = document.getElementById('eta-status-dot');
-  if (textEl) textEl.textContent = text;
-  if (dotEl) {
-    dotEl.className = 'pulse-dot';
-    if (dotState) dotEl.classList.add(dotState);
-  }
-}
-
-/**
- * Update accuracy badge and display device guidance alert when accuracy is low
- */
-function updateAccuracyDisplay(accuracyMeters) {
-  const badge = document.getElementById('eta-accuracy-badge');
-  const valEl = document.getElementById('eta-accuracy-val');
-  const alertSection = document.getElementById('eta-accuracy-alert');
-  const alertRadius = document.getElementById('eta-alert-radius');
-  const alertTitle = document.getElementById('eta-alert-title');
-  const alertDesc = document.getElementById('eta-alert-desc');
-
-  if (!accuracyMeters || isNaN(accuracyMeters)) {
-    if (badge) badge.style.display = 'none';
-    if (alertSection) alertSection.style.display = 'none';
-    return;
-  }
-
-  const rounded = Math.round(accuracyMeters);
-  const formattedRadius = rounded >= 1000 ? `±${(rounded / 1000).toFixed(1)} km` : `±${rounded} m`;
-
-  // 1. Badge Display
-  if (badge && valEl) {
-    badge.style.display = 'flex';
-    badge.classList.remove('accuracy-good', 'accuracy-moderate', 'accuracy-poor');
-
-    if (rounded <= 40) {
-      badge.classList.add('accuracy-good');
-      badge.innerHTML = `<i data-lucide="shield-check" style="width:13px;height:13px;"></i> GPS: ${formattedRadius} (High)`;
-    } else if (rounded <= 200) {
-      badge.classList.add('accuracy-moderate');
-      badge.innerHTML = `<i data-lucide="info" style="width:13px;height:13px;"></i> Wi-Fi / Net: ${formattedRadius}`;
-    } else {
-      badge.classList.add('accuracy-poor');
-      badge.innerHTML = `<i data-lucide="alert-triangle" style="width:13px;height:13px;"></i> Network: ${formattedRadius} (Low)`;
-    }
-  }
-
-  // 2. Alert Guidance Display for Low/Coarse Accuracy
-  if (alertSection) {
-    if (rounded > 200) {
-      alertSection.style.display = 'block';
-      if (alertRadius) alertRadius.textContent = formattedRadius;
-      if (alertTitle) {
-        alertTitle.textContent = rounded > 1000
-          ? `Location accuracy is low (${formattedRadius} — ISP / Network estimate)`
-          : `Location accuracy is moderate (${formattedRadius})`;
-      }
-      if (alertDesc) {
-        alertDesc.textContent = rounded > 1000
-          ? "On laptops without dedicated GPS hardware, location is estimated using your ISP network gateway (which may resolve to another district such as Valenzuela). Enable Windows Location Services and connect to Wi-Fi for an accurate fix."
-          : "Position is estimated using Wi-Fi / network beacons. For optimal accuracy, ensure Wi-Fi scanning and device location services are enabled.";
-      }
-    } else {
-      alertSection.style.display = 'none';
-    }
-  }
-
+function refreshIcons() {
   if (window.iconify) window.iconify();
   else if (window.lucide) window.lucide.createIcons();
 }
 
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
+
+/** "05:30" → "5:30 AM". Returns null for anything unparseable. */
+function formatClock(hhmm) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? "").trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  const suffix = hours < 12 ? "AM" : "PM";
+  const display = hours % 12 === 0 ? 12 : hours % 12;
+  return `${display}:${match[2]} ${suffix}`;
+}
+
+/** Headway may be a single number or a [min, max] range. */
+function formatHeadway(headway) {
+  if (Array.isArray(headway) && headway.length === 2) {
+    return `Every ${headway[0]}–${headway[1]} min`;
+  }
+  if (Number.isFinite(headway)) return `Every ${headway} min`;
+  return null;
+}
+
+/** Maps the real weekday onto one of the three schedule tabs. */
+function todayDayKey(now = new Date()) {
+  const day = now.getDay();
+  if (day === 0) return "sunday";
+  if (day === 6) return "saturday";
+  return "weekdays";
+}
+
+function dayOf(key) {
+  return busData?.service?.[key] ?? null;
+}
+
+/* ── Boot ────────────────────────────────────────────────── */
+
+async function initETA() {
+  wireScheduleTabs();
+
+  const [dataResult, corridorResult] = await Promise.allSettled([
+    fetch(BUS_DATA_URL, { cache: "no-cache" }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }),
+    fetch(CORRIDOR_URL, { cache: "no-cache" }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+  ]);
+
+  if (dataResult.status === "fulfilled") {
+    busData = dataResult.value;
+  } else {
+    console.warn("QCity Bus data unavailable:", dataResult.reason);
+  }
+
+  if (corridorResult.status === "fulfilled") {
+    corridor = corridorResult.value;
+  } else {
+    console.warn("Route 4 corridor geometry unavailable:", corridorResult.reason);
+  }
+
+  activeDay = todayDayKey();
+  renderRouteFacts();
+  renderScheduleTabs();
+  selectDay(activeDay, { animate: false, focus: false });
+  renderAbout();
+  renderSourceFooter();
+  initMap();
+  refreshIcons();
+}
+
+/* ── Route facts ─────────────────────────────────────────── */
+
+/** Formats a weekday peak/off-peak pair, a flat headway, or nothing. */
+function headwayText(entry) {
+  if (!entry) return null;
+  const peak = entry.headwayPeakMins;
+  const offPeak = entry.headwayOffPeakMins;
+  if (Number.isFinite(peak) && Number.isFinite(offPeak)) {
+    return `Every ${peak} min peak · ${offPeak} min off-peak`;
+  }
+  return formatHeadway(entry.headwayMins ?? peak ?? offPeak);
+}
+
 /**
- * Smoothly fits viewport to encompass the user location and QCU campus
+ * The only route fact that varies with the data file is frequency,
+ * because it is the one QC does not always publish. When it is missing
+ * the row says so rather than borrowing a number.
  */
-function fitMapBounds(userCoords, force = false) {
-  if (!map || !userCoords) return;
-  if (!force && isUserPanning) return;
+function renderRouteFacts() {
+  const cell = document.getElementById("bus-fact-frequency");
+  if (!cell) return;
 
-  const isMobile = window.innerWidth < 640;
-  const padding = isMobile
-    ? { top: 65, bottom: 45, left: 30, right: 30 }
-    : { top: 80, bottom: 65, left: 65, right: 65 };
+  const text = headwayText(dayOf("weekdays")?.directions?.[0]);
+  if (text) {
+    cell.textContent = text;
+    cell.className = "bus-fact-v";
+    return;
+  }
 
-  const bounds = new maplibregl.LngLatBounds()
-    .extend(userCoords)
-    .extend(QCU_COORDS);
+  cell.textContent = "Not published";
+  cell.className = "bus-fact-v bus-fact-v--unknown";
+  cell.title = "Quezon City publishes operating hours for this route rather than a fixed interval.";
+}
 
+/* ── Schedule tabs ───────────────────────────────────────── */
+
+function wireScheduleTabs() {
+  const tabs = [...document.querySelectorAll(".bus-sched-tab")];
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => selectDay(tab.dataset.day, { focus: false }));
+  });
+
+  // Roving tabindex + arrow-key navigation, per the ARIA tabs pattern.
+  document.querySelector(".bus-sched-tabs")?.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1, Home: "first", End: "last" }[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const current = tabs.findIndex((t) => t.dataset.day === activeDay);
+    let next;
+    if (step === "first") next = 0;
+    else if (step === "last") next = tabs.length - 1;
+    else next = (current + step + tabs.length) % tabs.length;
+    selectDay(tabs[next].dataset.day, { focus: true });
+  });
+}
+
+/** Tab sub-labels summarise each day before it is opened. */
+function renderScheduleTabs() {
+  DAY_KEYS.forEach((key) => {
+    const meta = document.querySelector(`[data-day-meta="${key}"]`);
+    if (!meta) return;
+    const day = dayOf(key);
+
+    if (!day) {
+      meta.textContent = "No data";
+      return;
+    }
+    if (day.operates === false) {
+      meta.textContent = "No service";
+      return;
+    }
+    if (Array.isArray(day.departures) && day.departures.length) {
+      meta.textContent = `${day.departures.length} trips`;
+      return;
+    }
+
+    // Widest service window across both directions.
+    const times = (day.directions || []).flatMap((d) => [d.firstTrip, d.lastTrip]).filter(Boolean).sort();
+    const first = formatClock(times[0]);
+    const last = formatClock(times[times.length - 1]);
+    meta.textContent = first && last ? `${first} – ${last}` : "Hours only";
+  });
+}
+
+function selectDay(key, { animate = true, focus = true } = {}) {
+  if (!DAY_KEYS.includes(key)) key = "weekdays";
+  activeDay = key;
+
+  document.querySelectorAll(".bus-sched-tab").forEach((tab) => {
+    const isActive = tab.dataset.day === key;
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    if (isActive && focus) tab.focus();
+  });
+
+  const body = document.getElementById("bus-sched-body");
+  if (!body) return;
+  body.setAttribute("aria-labelledby", `bus-tab-${key}`);
+  body.innerHTML = scheduleBodyHTML(key);
+
+  // Restart the entrance animation on every day change.
+  body.removeAttribute("data-enter");
+  if (animate) {
+    void body.offsetWidth;
+    body.setAttribute("data-enter", "");
+  }
+  refreshIcons();
+}
+
+/* ── Schedule body ───────────────────────────────────────── */
+
+function emptyStateHTML(icon, title, description) {
+  return `
+    <div class="bus-sched-empty">
+      <i data-lucide="${esc(icon)}" aria-hidden="true"></i>
+      <p class="bus-sched-empty-title">${esc(title)}</p>
+      <p class="bus-sched-empty-desc">${esc(description)}</p>
+    </div>`;
+}
+
+function setScheduleBadge(label, isKnown) {
+  const badge = document.getElementById("bus-sched-badge");
+  if (!badge) return;
+  badge.textContent = label;
+  badge.classList.toggle("bus-free-badge--muted", !isKnown);
+}
+
+const UNAVAILABLE = [
+  "calendar-x",
+  "Schedule unavailable",
+  "Check the latest QCity Bus advisory for today's operating schedule."
+];
+
+/**
+ * Three honest shapes, chosen by what the data actually contains:
+ *   departures[] → a real per-trip timetable, if QC ever publishes one
+ *   directions[] → operating window + interval per direction, which is
+ *                  what the Route 4 Terms of Reference actually states
+ *   neither      → unavailable
+ */
+function scheduleBodyHTML(key) {
+  const day = dayOf(key);
+
+  if (!day) {
+    setScheduleBadge("Unavailable", false);
+    return emptyStateHTML(...UNAVAILABLE);
+  }
+
+  if (day.operates === false) {
+    setScheduleBadge("No service", false);
+    return emptyStateHTML(
+      "calendar-off",
+      `No Route 4 service on ${DAY_LABELS[key]}`,
+      day.note || "Quezon City lists no QCity Bus operations for this day."
+    );
+  }
+
+  if (Array.isArray(day.departures) && day.departures.length) {
+    setScheduleBadge("Timetable", true);
+    return departureListHTML(day);
+  }
+
+  const directions = (day.directions || []).filter((d) => formatClock(d.firstTrip) && formatClock(d.lastTrip));
+  if (directions.length) {
+    setScheduleBadge("Service hours", true);
+    return directionListHTML(directions);
+  }
+
+  setScheduleBadge("Unavailable", false);
+  return emptyStateHTML(...UNAVAILABLE);
+}
+
+/**
+ * Quezon City publishes a service window and an interval per direction
+ * for Route 4, not clock times. Each direction gets one row: when the
+ * first bus leaves, when the last one does, and how often between.
+ * Interpolating departures inside that window would be invention.
+ */
+function directionListHTML(directions) {
+  const rows = directions
+    .map((direction, index) => {
+      const headway = headwayText(direction);
+      return `
+        <li class="bus-sched-dirrow" style="--i:${index}">
+          <p class="bus-sched-dirrow-label">${esc(direction.label)}</p>
+          <div class="bus-sched-dirrow-times">
+            <span class="bus-sched-dirrow-slot">
+              <span class="bus-sched-dirrow-k">First</span>
+              <span class="bus-sched-dirrow-v">${esc(formatClock(direction.firstTrip))}</span>
+            </span>
+            <span class="bus-sched-dirrow-rule" aria-hidden="true"></span>
+            <span class="bus-sched-dirrow-slot">
+              <span class="bus-sched-dirrow-k">Last</span>
+              <span class="bus-sched-dirrow-v">${esc(formatClock(direction.lastTrip))}</span>
+            </span>
+          </div>
+          ${headway ? `<p class="bus-sched-dirrow-headway">${esc(headway)}</p>` : ""}
+          ${direction.note ? `<p class="bus-sched-dirrow-note">${esc(direction.note)}</p>` : ""}
+        </li>`;
+    })
+    .join("");
+
+  return `
+    <p class="bus-sched-list-label">
+      <span>Scheduled departure</span>
+      <span class="bus-sched-list-count">${directions.length} directions</span>
+    </p>
+    <div class="bus-sched-scroll" tabindex="0" role="group" aria-label="Scheduled service hours by direction">
+      <ul class="bus-sched-rows">${rows}</ul>
+    </div>
+    <p class="bus-sched-foot" style="margin-top:8px;">
+      Quezon City publishes service hours and intervals for Route 4, not a per-trip timetable.
+    </p>`;
+}
+
+/** Renders a real per-trip timetable if the data file ever carries one. */
+function departureListHTML(day) {
+  const rows = day.departures
+    .map((entry, index) => {
+      const time = formatClock(typeof entry === "string" ? entry : entry.time);
+      if (!time) return "";
+      const direction = typeof entry === "object" ? entry.direction : day.direction;
+      return `
+        <li class="bus-sched-row" style="--i:${index}">
+          <span class="bus-sched-seq">${index + 1}</span>
+          <span class="bus-sched-time">${esc(time)}</span>
+          ${direction ? `<span class="bus-sched-dir">${esc(direction)}</span>` : ""}
+        </li>`;
+    })
+    .join("");
+
+  return `
+    <p class="bus-sched-list-label">
+      <span>Scheduled departure</span>
+      <span class="bus-sched-list-count">${day.departures.length} trips</span>
+    </p>
+    <div class="bus-sched-scroll" tabindex="0" role="group" aria-label="Scheduled departure times">
+      <ol class="bus-sched-rows">${rows}</ol>
+    </div>`;
+}
+
+/* ── About card + source footer ──────────────────────────── */
+
+function renderAbout() {
+  const routeCount = document.getElementById("bus-about-routes");
+  if (routeCount) {
+    const total = busData?.program?.routeCount;
+    routeCount.textContent = Number.isFinite(total)
+      ? `${total} QCity Bus routes`
+      : "Multiple QCity Bus routes";
+  }
+
+  // The free fare is not a promotion — it is written into a city ordinance.
+  const fareNote = document.getElementById("bus-about-fare-note");
+  const ordinance = busData?.program?.ordinance;
+  if (fareNote && ordinance) {
+    fareNote.textContent = `No fare, no beep card. Institutionalized by ${ordinance}.`;
+  }
+
+  // Wi-Fi is only claimed when the route's own requirements list it.
+  const wifiItem = document.getElementById("bus-about-wifi");
+  if (wifiItem && busData && busData.program?.amenities?.wifi !== true) {
+    wifiItem.remove();
+  }
+
+  const link = document.getElementById("bus-official-link");
+  const url = busData?.program?.officialUrl;
+  if (link && url) link.href = url;
+}
+
+function renderSourceFooter() {
+  const stamp = document.getElementById("bus-source-date");
+  if (!stamp) return;
+  const verified = busData?.meta?.lastVerified;
+  if (!verified) {
+    stamp.textContent = "date unknown";
+    return;
+  }
+  stamp.dateTime = verified;
+  const parsed = new Date(`${verified}T00:00:00`);
+  stamp.textContent = Number.isNaN(parsed.getTime())
+    ? verified
+    : parsed.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+}
+
+/* ── Map ─────────────────────────────────────────────────── */
+
+function hasWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch (error) {
+    return false;
+  }
+}
+
+function showMapUnavailable(reason) {
+  const wrapper = document.querySelector(".eta-map-wrapper");
+  if (!wrapper || wrapper.querySelector(".map-unavailable")) return;
+  const panel = document.createElement("div");
+  panel.className = "map-unavailable";
+  panel.innerHTML = `
+    <i data-lucide="map-off" aria-hidden="true"></i>
+    <p class="map-unavailable-title">Map unavailable</p>
+    <p class="map-unavailable-desc">${esc(reason)}</p>`;
+  wrapper.appendChild(panel);
+  refreshIcons();
+}
+
+function pinMarker({ coords, label, variant }) {
+  const element = document.createElement("div");
+  element.className = variant === "campus" ? "qcu-marker-container" : "terminus-marker-container";
+  const pinClass = variant === "campus" ? "qcu-marker-pin" : "terminus-marker-pin";
+  const labelClass = variant === "campus" ? "qcu-marker-label" : "terminus-marker-label";
+  element.innerHTML = `
+    <div class="${pinClass}" title="${esc(label)}"></div>
+    <span class="${labelClass}">${esc(label)}</span>`;
+  // Offset by the label block so the pin's tip — not the label's baseline —
+  // lands on the coordinate.
+  return new maplibregl.Marker({ element, anchor: "bottom", offset: [0, 20] }).setLngLat(coords);
+}
+
+function initMap() {
+  if (map) return;
+
+  if (typeof maplibregl === "undefined") {
+    showMapUnavailable("The map library could not be loaded. Check your connection and reload.");
+    return;
+  }
+  // MapLibre 4 dropped maplibregl.supported(), so probe WebGL directly.
+  if (!hasWebGL()) {
+    showMapUnavailable("This browser does not support WebGL, which the map needs to draw.");
+    return;
+  }
+
+  const coordinates = Array.isArray(corridor?.coordinates) ? corridor.coordinates : [];
+
+  try {
+    map = new maplibregl.Map({
+      container: "eta-map",
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      center: coordinates.length ? coordinates[Math.floor(coordinates.length / 2)] : QCU_COORDS,
+      zoom: 11.6,
+      attributionControl: false
+    });
+  } catch (error) {
+    console.warn("Map could not start:", error);
+    showMapUnavailable("The map could not start in this browser. The schedule below is unaffected.");
+    return;
+  }
+
+  map.addControl(new maplibregl.AttributionControl({ compact: true }));
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+  map.on("error", (event) => console.warn("Map error:", event?.error?.message || event));
+
+  // Markers are DOM overlays and the camera is available immediately, so
+  // the campus and termini are placed without waiting on tiles. Sources and
+  // layers need the style, which lands well before the first full render —
+  // "style.load" rather than "load" keeps the route visible on slow links.
+  drawTermini();
+  annotateCorridorOverlay();
+
+  map.on("style.load", () => {
+    try {
+      if (coordinates.length > 1) drawCorridor(coordinates);
+      drawStops();
+    } catch (error) {
+      console.warn("Route layers could not be drawn:", error);
+    }
+    // Framing waits for the style so the container has been measured;
+    // fitBounds against an unmeasured viewport overshoots badly.
+    fitToCorridor(coordinates);
+  });
+}
+
+/** Casing beneath the line keeps it legible over a light basemap. */
+function drawCorridor(coordinates) {
+  map.addSource("route4", {
+    type: "geojson",
+    data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } }
+  });
+
+  map.addLayer({
+    id: "route4-casing",
+    type: "line",
+    source: "route4",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#FFFFFF", "line-width": 8, "line-opacity": 0.9 }
+  });
+
+  map.addLayer({
+    id: "route4-line",
+    type: "line",
+    source: "route4",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#005BAC", "line-width": 4, "line-opacity": 0.95 }
+  });
+}
+
+/**
+ * Stops come from the data file only. Nothing is inferred from the
+ * drawn line, so an unverified stop list simply renders no dots.
+ */
+function drawStops() {
+  const stops = Array.isArray(busData?.route?.stops) ? busData.route.stops : [];
+  if (!stops.length) return;
+
+  map.addSource("route4-stops", {
+    type: "geojson",
+    data: {
+      type: "FeatureCollection",
+      features: stops
+        .filter((stop) => Array.isArray(stop.coords) && stop.coords.length === 2)
+        .map((stop) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: stop.coords },
+          properties: { name: stop.name, kind: stop.kind || "Bus stop" }
+        }))
+    }
+  });
+
+  map.addLayer({
+    id: "route4-stops-layer",
+    type: "circle",
+    source: "route4-stops",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 3.5, 14, 5.5, 16, 7],
+      "circle-color": "#FFFFFF",
+      "circle-stroke-color": "#005BAC",
+      "circle-stroke-width": 2
+    }
+  });
+
+  map.addLayer({
+    id: "route4-stops-labels",
+    type: "symbol",
+    source: "route4-stops",
+    minzoom: 13,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 11,
+      "text-offset": [0, 1.1],
+      "text-anchor": "top",
+      "text-allow-overlap": false
+    },
+    paint: {
+      "text-color": "#0A3D6E",
+      "text-halo-color": "#FFFFFF",
+      "text-halo-width": 1.6
+    }
+  });
+
+  const popup = new maplibregl.Popup({ closeButton: true, offset: 10, maxWidth: "220px" });
+
+  map.on("click", "route4-stops-layer", (event) => {
+    const feature = event.features?.[0];
+    if (!feature) return;
+    popup
+      .setLngLat(feature.geometry.coordinates)
+      .setHTML(
+        `<p class="map-stop-popup-name">${esc(feature.properties.name)}</p>
+         <p class="map-stop-popup-kind">${esc(feature.properties.kind)}</p>`
+      )
+      .addTo(map);
+  });
+
+  map.on("mouseenter", "route4-stops-layer", () => { map.getCanvas().style.cursor = "pointer"; });
+  map.on("mouseleave", "route4-stops-layer", () => { map.getCanvas().style.cursor = ""; });
+}
+
+function drawTermini() {
+  pinMarker({ coords: QCU_COORDS, label: "QCU Campus", variant: "campus" }).addTo(map);
+
+  (busData?.route?.termini || []).forEach((terminus) => {
+    if (!Array.isArray(terminus.coords) || terminus.coords.length !== 2) return;
+    pinMarker({ coords: terminus.coords, label: terminus.label, variant: "terminus" }).addTo(map);
+  });
+}
+
+function fitToCorridor(coordinates) {
+  const points = coordinates.length ? [...coordinates] : [];
+  points.push(QCU_COORDS);
+  if (points.length < 2) {
+    map.jumpTo({ center: QCU_COORDS, zoom: 14 });
+    return;
+  }
+  const bounds = points.reduce(
+    (acc, point) => acc.extend(point),
+    new maplibregl.LngLatBounds(points[0], points[0])
+  );
+  // The route plate sits top-left and the legend bottom-left. On a phone the
+  // container is portrait and the corridor is a narrow vertical ribbon, so the
+  // padding is biased right to keep the line clear of both overlays. Desktop has
+  // horizontal slack already and only needs to clear the chrome.
+  const isNarrow = window.matchMedia("(max-width: 480px)").matches;
   map.fitBounds(bounds, {
-    padding,
-    maxZoom: 16,
-    minZoom: 10,
-    duration: force ? 800 : 1000
+    padding: isNarrow
+      ? { top: 152, right: 20, bottom: 84, left: 20 }
+      : { top: 96, right: 48, bottom: 104, left: 48 },
+    duration: 0
   });
 }
 
-/**
- * Manual Recenter function to refocus map on active tracking
- */
-function recenterMap() {
-  isUserPanning = false;
-  if (lastCoords) {
-    fitMapBounds(lastCoords, true);
-    updateStatus("Map recentered", "active");
-  } else {
-    if (map) map.flyTo({ center: QCU_COORDS, zoom: 14, duration: 800 });
-    updateStatus("Acquiring location…", "active");
-  }
+/** Names the actual roads the drawn corridor follows, from the geometry file. */
+function annotateCorridorOverlay() {
+  const target = document.getElementById("map-route-overlay-sub");
+  if (!target) return;
+  const km = corridor?.lengthKm;
+  const distance = Number.isFinite(km) ? `≈${km} km` : null;
+  target.textContent = distance
+    ? `${distance} road path between the published Route 4 endpoints — indicative, not a live bus position.`
+    : "Road path between the published Route 4 endpoints — indicative, not a live bus position.";
 }
 
-/**
- * Handle incoming position data from Geolocation API.
- * Rejects readings that are obviously stale, impossible, or inaccurate.
- */
-function handlePositionUpdate(position, isFreshFix = false) {
-  const { latitude, longitude, accuracy } = position.coords;
-  const timestamp = position.timestamp || Date.now();
-
-  // Basic sanity validation
-  if (isNaN(latitude) || isNaN(longitude)) return;
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return;
-
-  // Stale reading prevention (never go backwards in time)
-  if (lastTimestamp && timestamp < lastTimestamp) return;
-
-  const currentCoords = [longitude, latitude]; // MapLibre takes [Lon, Lat]
-  const prevAccuracy = lastAccuracy;
-
-  // ── GPS accuracy quality gate ──
-  // Reject very poor readings on first fix (> 2 km) — almost certainly ISP gateway
-  if (!hasFirstFix && accuracy > 2000) {
-    updateStatus("Location imprecise — waiting for a better GPS fix…", "active");
-    return;
-  }
-
-  lastAccuracy = accuracy;
-  lastTimestamp = timestamp;
-  updateAccuracyDisplay(accuracy);
-
-  // Warn on degraded accuracy (jump detection)
-  if (prevAccuracy !== null && prevAccuracy < 100 && accuracy > prevAccuracy * 2) {
-    updateStatus(`GPS accuracy dropped (±${Math.round(accuracy)}m) — recalculating…`, "error");
-  } else if (accuracy > 200) {
-    updateStatus(`Location coarse (±${Math.round(accuracy)}m) — estimates may differ`, "error");
-  }
-
-  // On first valid fix, add user marker to map and fit camera
-  if (!hasFirstFix) {
-    hasFirstFix = true;
-    userMarker.setLngLat(currentCoords).addTo(map);
-    fitMapBounds(currentCoords, true);
-  } else {
-    userMarker.setLngLat(currentCoords);
-  }
-
-  // Update GeoJSON Accuracy Circle Polygon on map
-  if (map && map.getSource('accuracy-source')) {
-    const circleGeoJSON = createGeoJSONCircle(currentCoords, accuracy);
-    map.getSource('accuracy-source').setData({
-      type: 'Feature',
-      properties: {},
-      geometry: circleGeoJSON
-    });
-  }
-
-  // Check if user has moved enough to warrant route recalculation
-  const distanceMoved = lastCoords
-    ? getDistanceFromLatLonInMeters(lastCoords[1], lastCoords[0], latitude, longitude)
-    : Infinity;
-
-  lastCoords = currentCoords;
-
-  // Persist the fix so other pages (Home weather + flood advisory) can center
-  // on the user's real location instead of the hardcoded campus coordinate.
-  // Reuses the permission already granted here — no second prompt on Home.
-  try {
-    localStorage.setItem("qcu:user-location", JSON.stringify({
-      lat: latitude, lon: longitude, accuracy: accuracy, t: timestamp
-    }));
-  } catch (e) { /* storage unavailable — non-fatal */ }
-
-  if (isFreshFix || distanceMoved > ROUTE_DEBOUNCE_METERS) {
-    fetchRoute(currentCoords, isFreshFix);
-  } else {
-    updateStatus("Location updated", "success");
-  }
-}
-
-/**
- * Handle Geolocation Errors
- */
-function handlePositionError(error) {
-  console.warn("Geolocation error:", error);
-
-  if (error.code === 1) {
-    // Permission denied — stop watching to avoid repeated prompts, and guide the user.
-    stopTracking();
-    updateStatus("Location access denied — allow location, then tap “Locate Me”", "error");
-    const el = document.getElementById('eta-updated');
-    if (el) el.textContent = 'Enable location in your browser/site settings, then retry.';
-    return;
-  }
-
-  let message = "GPS signal error";
-  if (error.code === 2) message = "Location unavailable — check GPS/network";
-  else if (error.code === 3) message = "Location fix timed out — retrying…";
-  updateStatus(message, "error");
-}
-
-/**
- * Force a fresh location acquisition (no cache)
- */
-function reacquireLocation() {
-  if (!navigator.geolocation) {
-    updateStatus("Geolocation unsupported", "error");
-    return;
-  }
-
-  updateStatus("Reacquiring fresh location…", "active");
-  isUserPanning = false;
-
-  stopTracking();
-
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      handlePositionUpdate(pos, true);
-      startTracking();
-    },
-    (err) => {
-      handlePositionError(err);
-      startTracking();
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 0,       // Force fresh location query
-      timeout: 15000
-    }
-  );
-}
-
-/**
- * Start continuous Geolocation tracking using watchPosition
- */
-function startTracking() {
-  if (!navigator.geolocation) {
-    updateStatus("Geolocation unsupported", "error");
-    return;
-  }
-
-  if (watchId !== null) return;
-
-  updateStatus("Acquiring device location…", "active");
-
-  const geoOptions = {
-    enableHighAccuracy: true,
-    maximumAge: 0,       // Never use stale cached coordinates
-    timeout: 12000       // 12-second timeout per reading
-  };
-
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => handlePositionUpdate(pos, false),
-    (err) => handlePositionError(err),
-    geoOptions
-  );
-
-  // Background refresh so live traffic stays current even while stationary.
-  // Reasonable cadence (not per-second); force=true bypasses the move throttle.
-  if (refreshTimer === null) {
-    refreshTimer = setInterval(() => {
-      if (isTracking && lastCoords) fetchRoute(lastCoords, true);
-    }, ETA_TUNING.periodicRefreshMs);
-  }
-}
-
-/**
- * Stop Geolocation watch
- */
-function stopTracking() {
-  if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-  }
-  if (refreshTimer !== null) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
-}
-
-/**
- * Classify real traffic level from the ratio of traffic-aware to free-flow time.
- * Canonical states: CLEAR / NORMAL / MODERATE / HEAVY / SEVERE.
- * Only ever called with genuine TomTom durations — never a heuristic.
- * @param {number} staticMinutes  - free-flow travel time (traffic=false)
- * @param {number} trafficMinutes - traffic-aware travel time (traffic=true)
- * @returns {object} { label, level, delayMinutes }
- */
-function classifyTraffic(staticMinutes, trafficMinutes) {
-  const delayMinutes = Math.max(0, trafficMinutes - staticMinutes);
-  const delayRatio = staticMinutes > 0 ? trafficMinutes / staticMinutes : 1;
-
-  let label, level;
-  if (delayRatio <= 1.05) {
-    label = 'CLEAR';
-    level = 'clear';
-  } else if (delayRatio <= 1.2) {
-    label = 'NORMAL';
-    level = 'normal';
-  } else if (delayRatio <= 1.5) {
-    label = 'MODERATE';
-    level = 'moderate';
-  } else if (delayRatio <= 2.0) {
-    label = 'HEAVY';
-    level = 'heavy';
-  } else {
-    label = 'SEVERE';
-    level = 'severe';
-  }
-
-  return { label, level, delayMinutes };
-}
-
-/**
- * Build TomTom routing URL with traffic
- */
-async function fetchRoute(userCoords, force = false) {
-  const now = Date.now();
-  if (!force && (now - lastRouteTime < ROUTE_THROTTLE_MS)) return;
-  updateStatus("Calculating route with live traffic...", "active");
-  try {
-    const url = ROUTE_API + "?lat=" + encodeURIComponent(userCoords[1]) + "&lon=" + encodeURIComponent(userCoords[0]);
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error("Route proxy HTTP " + res.status);
-    const data = await res.json();
-    if (!data || data.status !== "OK" || !Array.isArray(data.geometry)) throw new Error("Invalid route response");
-    lastRouteTime = Date.now();
-    if (map && map.getSource("route")) map.getSource("route").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: data.geometry } });
-    if (!isUserPanning) fitMapBounds(userCoords, false);
-    const staticMins = Number(data.normalMins);
-    const trafficMins = Number(data.currentMins);
-    renderRoute({ normalMins: staticMins, currentMins: trafficMins, km: data.distanceKm, trafficInfo: classifyTraffic(staticMins, trafficMins), hasLiveTraffic: true, trafficRoute: null });
-    updateStatus("GPS tracking active - live traffic", "success");
-  } catch (err) {
-    console.warn("Route proxy unavailable, falling back to OSRM:", err);
-    fetchRouteOSRM(userCoords, force);
-  }
-}
-/**
- * Fallback to OSRM if TomTom is unavailable
- */
-async function fetchRouteOSRM(userCoords, force = false) {
-  const now = Date.now();
-  if (!force && (now - lastRouteTime < ROUTE_THROTTLE_MS)) {
-    return;
-  }
-
-  updateStatus("Calculating road route (fallback)…", "active");
-
-  const url = `https://router.project-osrm.org/route/v1/driving/${userCoords[0]},${userCoords[1]};${QCU_COORDS[0]},${QCU_COORDS[1]}?overview=full&geometries=geojson`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`OSRM API error (${res.status})`);
-    const data = await res.json();
-
-    if (data.routes && data.routes.length > 0) {
-      lastRouteTime = Date.now();
-      const route = data.routes[0];
-
-      if (map && map.getSource('route')) {
-        map.getSource('route').setData({
-          type: 'Feature',
-          properties: {},
-          geometry: route.geometry
-        });
-      }
-
-      if (!isUserPanning) {
-        fitMapBounds(userCoords, false);
-      }
-
-      const baseMins = Math.max(1, Math.ceil(route.duration / 60));
-      const km = (route.distance / 1000).toFixed(1);
-
-      // OSRM demo server has NO live-traffic feed. We report the base road
-      // estimate honestly and mark traffic UNAVAILABLE — we never invent a
-      // delay multiplier and present it as real traffic.
-      renderRoute({
-        normalMins: baseMins,
-        currentMins: baseMins,
-        km,
-        trafficInfo: null,
-        hasLiveTraffic: false,
-        trafficRoute: null
-      });
-      updateStatus("Routing active — traffic data unavailable", "active");
-    } else {
-      throw new Error("No driving route found");
-    }
-  } catch (err) {
-    console.warn("OSRM routing unavailable, using straight-line fallback:", err);
-    fallbackETA(userCoords);
-  }
-}
-
-/**
- * Fallback straight-line estimation if both TomTom and OSRM are offline.
- * Reports an approximate distance-based ETA with traffic UNAVAILABLE.
- */
-function fallbackETA(userCoords) {
-  if (map && map.getSource('route')) {
-    map.getSource('route').setData({
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: [userCoords, QCU_COORDS]
-      }
-    });
-  }
-
-  const distMeters = getDistanceFromLatLonInMeters(userCoords[1], userCoords[0], QCU_COORDS[1], QCU_COORDS[0]);
-  const km = (distMeters / 1000).toFixed(1);
-  const avgTransitSpeedKmh = 35;
-  const baseMins = Math.max(1, Math.ceil((distMeters / 1000 / avgTransitSpeedKmh) * 60));
-
-  // Straight-line only — no road network, no traffic. Clearly approximate.
-  renderRoute({
-    normalMins: baseMins,
-    currentMins: baseMins,
-    km,
-    trafficInfo: null,
-    hasLiveTraffic: false,
-    approx: true,
-    trafficRoute: null
-  });
-  updateStatus("Routing limited — approximate distance only", "error");
-
-  if (!isUserPanning) {
-    fitMapBounds(userCoords, false);
-  }
-}
-
-/**
- * Calculate and display clock-time of estimated arrival
- */
-function updateArrivalTime(durationMins) {
-  const el = document.getElementById('eta-class-arrival');
-  if (!el) return;
-
-  const arrivalDate = new Date(Date.now() + durationMins * 60000);
-  const arrivalStr = arrivalDate.toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-  el.textContent = `Est. arrival: ${arrivalStr}`;
-}
-
-/**
- * Single source of truth for rendering a computed route into the UI.
- * Accepts a normalized route object so every routing source (TomTom / OSRM /
- * straight-line) renders identically and honestly.
- * @param {object} r
- *   normalMins {number}  free-flow / base travel time
- *   currentMins {number} traffic-aware time (== normalMins when no live traffic)
- *   km {string}          distance
- *   trafficInfo {object|null} { label, level, delayMinutes } — only when real
- *   hasLiveTraffic {boolean}  true only for measured TomTom traffic
- *   approx {boolean}     true for straight-line estimate (prefix "~")
- */
-function renderRoute(r) {
-  const { normalMins, currentMins, km, trafficInfo, hasLiveTraffic, approx } = r;
-  const prefix = approx ? '~' : '';
-
-  lastETAMinutes = currentMins;
-  lastUpdatedAt = new Date();
-  lastRouteData = r;
-
-  const staticEl = document.getElementById('eta-val-static');
-  if (staticEl) staticEl.textContent = `${prefix}${normalMins} min`;
-
-  const timeEl = document.getElementById('eta-val-time');
-  if (timeEl) timeEl.textContent = `${prefix}${currentMins} min`;
-
-  const distEl = document.getElementById('eta-val-dist');
-  if (distEl) distEl.textContent = `${km} km`;
-
-  // TRAFFIC — real state, or explicit "Unavailable"; never a fabricated "Live"
-  renderTrafficBox(hasLiveTraffic, trafficInfo);
-
-  updateArrivalTime(currentMins);
-  updateClassStatus(currentMins, trafficInfo, hasLiveTraffic);
-  renderUpdatedTime();
-
-  if (window.lucide) window.lucide.createIcons();
-}
-
-/**
- * Render the Traffic stat box. Color lives ONLY on the small indicator dot —
- * the box background/text stay neutral (institutional restraint).
- */
-function renderTrafficBox(hasLiveTraffic, trafficInfo) {
-  const el = document.getElementById('eta-val-status');
-  if (!el) return;
-
-  el.classList.remove(
-    'traffic-clear', 'traffic-normal', 'traffic-moderate',
-    'traffic-heavy', 'traffic-severe', 'traffic-unavailable'
-  );
-
-  if (!hasLiveTraffic || !trafficInfo) {
-    el.classList.add('traffic-unavailable');
-    el.innerHTML = '<span class="traffic-ind"></span><span class="traffic-label">Unavailable</span>';
-    return;
-  }
-
-  el.classList.add(`traffic-${trafficInfo.level}`);
-  const delay = trafficInfo.delayMinutes || 0;
-  const delayLine = delay > 0
-    ? `<span class="traffic-delay">+${delay} min delay</span>`
-    : '<span class="traffic-delay">No delay</span>';
-  el.innerHTML =
-    `<span class="traffic-ind"></span>` +
-    `<span class="traffic-label">${trafficInfo.label}</span>${delayLine}`;
-}
-
-/**
- * Render the "Updated H:MM · source" line so the freshness of the estimate
- * is always visible (no silent stale data).
- */
-function renderUpdatedTime() {
-  const el = document.getElementById('eta-updated');
-  if (!el || !lastUpdatedAt) return;
-  const t = lastUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-  let src = 'No live traffic';
-  if (lastRouteData && lastRouteData.hasLiveTraffic) src = 'Live traffic';
-  else if (lastRouteData && lastRouteData.approx) src = 'Approximate';
-  el.textContent = `Updated ${t} · ${src}`;
-}
-
-/**
- * Compare final ETA with next scheduled class and update the class status panel.
- * When the next class is on a different day, show info without the on-time comparison.
- * @param {number} etaMinutes - ETA in minutes from now (traffic-aware when available)
- * @param {object|null} traffic - { label, level, delayMinutes } when live traffic exists
- * @param {boolean} hasLiveTraffic - whether `traffic` reflects measured live conditions
- */
-function updateClassStatus(etaMinutes, traffic, hasLiveTraffic) {
-  const banner = document.getElementById('eta-class-banner');
-  const noclass = document.getElementById('eta-noclass-banner');
-  if (!banner || !noclass) return;
-
-  const now = new Date();
-  const nextClass = getNextClass(now);
-
-  // No class scheduled → show no-class banner, hide class banner
-  if (!nextClass) {
-    banner.style.display = 'none';
-    noclass.style.display = 'flex';
-    document.getElementById('eta-noclass-text').textContent =
-      now.getDay() === 0 || now.getDay() === 6
-        ? 'No classes on weekends. Enjoy your day off!'
-        : 'No more classes scheduled for today.';
-    return;
-  }
-
-  noclass.style.display = 'none';
-  banner.style.display = 'block';
-
-  // Populate class info in new panel structure
-  const dayName = DAY_MAP[now.getDay()];
-  const isClassToday = nextClass.day === dayName;
-  const arrivalMinutes = now.getHours() * 60 + now.getMinutes() + etaMinutes;
-  const arrivalTime = new Date(Date.now() + etaMinutes * 60000);
-  const arrivalTimeStr = arrivalTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-
-  document.getElementById('eta-class-day').textContent = isClassToday ? dayName.toUpperCase() : nextClass.day.toUpperCase();
-  document.getElementById('eta-class-course').textContent = nextClass.course || '—';
-  document.getElementById('eta-class-subject').textContent = nextClass.subject || '—';
-  document.getElementById('eta-class-schedule').textContent = `${formatTime12(nextClass.start)} – ${formatTime12(nextClass.end)}`;
-  document.getElementById('eta-class-location').textContent = `${nextClass.room || '—'} · ${nextClass.building || '—'}`;
-  document.getElementById('eta-class-arrival').textContent = `Est. arrival: ${arrivalTimeStr}`;
-
-  // Traffic source note — honest about whether traffic is live or unavailable
-  const trafficEl = document.getElementById('eta-class-traffic');
-  if (trafficEl) {
-    if (hasLiveTraffic && traffic) {
-      const delay = traffic.delayMinutes || 0;
-      const delayText = delay > 0
-        ? `<span class="traffic-source">+${delay} min delay · via Quirino Highway</span>`
-        : `<span class="traffic-source">No delay · via Quirino Highway</span>`;
-      trafficEl.innerHTML = `${traffic.label} · Live traffic<br>${delayText}`;
-    } else {
-      trafficEl.innerHTML = `Traffic data unavailable<br><span class="traffic-source">Estimate via Quirino Highway</span>`;
-    }
-    if (window.lucide) window.lucide.createIcons();
-  }
-
-  // On-time status comparison
-  const dot = document.getElementById('eta-class-dot');
-  const verdict = document.getElementById('eta-class-verdict');
-  const margin = document.getElementById('eta-class-margin');
-  const statusBox = document.getElementById('eta-class-status-box');
-
-  // Clear previous verdict state (4 possible tones)
-  statusBox.classList.remove('eta-status-ok', 'eta-status-tight', 'eta-status-risk', 'eta-status-late');
-
-  if (isClassToday) {
-    const classStartMinutes = timeToMinutes(nextClass.start);
-    const diffMinutes = classStartMinutes - arrivalMinutes; // margin before class start
-
-    if (diffMinutes >= ETA_TUNING.onTimeBufferMin) {
-      // Comfortable margin
-      statusBox.classList.add('eta-status-ok');
-      dot.innerHTML = '<i data-lucide="check-circle-2" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'ON TIME';
-      margin.textContent = `${diffMinutes} min before class`;
-    } else if (diffMinutes >= ETA_TUNING.tightBufferMin) {
-      // Tight but should make it
-      statusBox.classList.add('eta-status-tight');
-      dot.innerHTML = '<i data-lucide="alert-triangle" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'TIGHT';
-      margin.textContent = `${diffMinutes} min buffer`;
-    } else if (diffMinutes >= 0) {
-      // Barely on time — any delay means late
-      statusBox.classList.add('eta-status-risk');
-      dot.innerHTML = '<i data-lucide="alert-circle" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'AT RISK';
-      margin.textContent = `Only ${diffMinutes} min to spare`;
-    } else {
-      // ETA is after class start
-      statusBox.classList.add('eta-status-late');
-      dot.innerHTML = '<i data-lucide="x-circle" style="width:14px;height:14px;"></i>';
-      verdict.textContent = 'LATE';
-      margin.textContent = `${Math.abs(diffMinutes)} min after start`;
-    }
-  } else {
-    // Class is on a different day — show info without comparing ETAs
-    statusBox.classList.add('eta-status-ok');
-    dot.innerHTML = '<i data-lucide="calendar" style="width:14px;height:14px;"></i>';
-    verdict.textContent = 'NEXT CLASS';
-    margin.textContent = `First class at ${formatTime12(nextClass.start)}`;
-  }
-  if (window.lucide) window.lucide.createIcons();
-}
-
-/**
- * Convert 24h HH:MM to 12h readable format (e.g., "7:30 AM")
- */
-function formatTime12(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 || 12;
-  return m === 0 ? `${hour12} ${period}` : `${hour12}:${String(m).padStart(2, '0')} ${period}`;
-}
-
-/**
- * Haversine formula to compute great-circle distance between two points in meters
- */
-function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth radius in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+window.initETA = initETA;

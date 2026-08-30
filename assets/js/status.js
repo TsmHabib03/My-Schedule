@@ -490,11 +490,12 @@
   }
 
   /* =============================================================
-     USER LOCATION — the ETA page persists the device's GPS fix to
-     localStorage ("qcu:user-location"). Weather + flood advisories
-     center on that real location so they reflect where the student
-     actually is. If no recent fix exists (ETA never opened, or the
-     reading is stale/invalid), fall back to the campus coordinate.
+     USER LOCATION — the home status widget's own "use my location"
+     control persists the device's GPS fix to localStorage
+     ("qcu:user-location"). Weather + flood advisories center on that
+     real location so they reflect where the student actually is. If no
+     recent fix exists (never granted, or the reading is stale/invalid),
+     fall back to the campus coordinate.
      ============================================================= */
   var LOC_KEY = "qcu:user-location";
   var LOC_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h — older fixes are dropped.

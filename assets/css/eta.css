@@ -1,720 +1,1001 @@
 /* ============================================================
    QCU Student Portal — eta.css
-   Styles for Campus ETA page (Map + Floating Panels)
+   QCity Bus · Libreng Sakay panel (Route 4) + reference map
+
+   Design language inherited from the flood-advisory component in
+   styles.css: flat surfaces, hairline (1px) dividers, 3px top rail
+   for section identity, 4px radii, uppercase 800-weight micro-labels,
+   key-left / value-right metric rows, tabular numerals on all times.
+   No gradients. No live/real-time claims anywhere in this file.
    ============================================================ */
 
-/* ── Accuracy Notice / Device Guidance Alert ── */
-.eta-accuracy-alert {
-  border-left: 4px solid var(--gold);
-  background: var(--gold-soft);
-  padding: 14px 16px;
-  transition: all var(--transition);
+/* Screen-reader-only text. The route plate carries "4" visually; the
+   heading needs the full name for assistive technology. */
+.bus-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
-.eta-accuracy-alert.alert-danger {
-  border-left-color: var(--red);
-  background: var(--red-soft);
+/* ── Page header: bus mark + title + free-ride badge ── */
+.bus-page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
 }
 
-.eta-alert-title {
-  font-size: 14px;
-  font-weight: 700;
+.bus-page-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid var(--blue-mid);
+  border-radius: var(--radius-sm);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.bus-page-mark i,
+.bus-page-mark svg { width: 22px; height: 22px; stroke-width: 2; }
+
+.bus-page-headings { min-width: 0; flex: 1 1 auto; }
+
+.bus-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Fact badge — outlined, not filled: only alerts earn filled colour. */
+.bus-free-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--blue-mid);
+  border-radius: 3px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.bus-free-badge i,
+.bus-free-badge svg { width: 11px; height: 11px; stroke-width: 2.4; }
+
+/* ── Shared section shell: 3px top rail, squared, flat ── */
+.bus-panel {
+  min-width: 0;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--divider);
+  border-top: 3px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.bus-panel--muted { border-top-color: var(--fn-slate); background: var(--bg); }
+
+.bus-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.bus-panel-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.bus-panel-icon {
+  width: 16px; height: 16px; flex-shrink: 0;
+  color: var(--blue); stroke-width: 2;
+}
+
+.bus-panel--muted .bus-panel-icon { color: var(--fn-slate); }
+
+.bus-panel-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
-/* ── Map Wrapper ── */
+/* ── Route card: number plate + corridor summary ── */
+.bus-route-ident {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+/* Route number reads as a plate, not a pill: squared, solid, tabular. */
+.bus-route-no {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.bus-route-ident-text { min-width: 0; }
+
+.bus-route-corridor {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.bus-route-anchor {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--blue);
+  overflow-wrap: anywhere;
+}
+
+.bus-route-note {
+  margin-top: 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.bus-route-note strong { font-weight: 800; color: var(--text); }
+
+/* ── Key/value fact rows ── */
+.bus-facts {
+  margin-top: 11px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.bus-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.bus-fact:last-child { border-bottom: none; }
+
+.bus-fact-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.bus-fact-v {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.bus-fact-v--free { color: var(--fn-green); letter-spacing: 0.04em; }
+.bus-fact-v--muted { color: var(--muted); font-weight: 700; font-size: 12px; }
+.bus-fact-v--unknown { color: var(--fn-slate); font-weight: 700; font-size: 12px; font-style: italic; }
+
+/* ── Advisory block — matches .flood-guidance accent bar ── */
+.bus-advisory {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 8px 0 8px 10px;
+  border-left: 3px solid var(--fn-slate);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.bus-advisory-icon {
+  width: 15px; height: 15px; flex-shrink: 0;
+  stroke-width: 2; margin-top: 1px;
+  color: var(--fn-slate);
+}
+
+.bus-advisory strong { font-weight: 800; }
+.bus-advisory p { margin: 0; overflow-wrap: anywhere; }
+.bus-advisory p + p { margin-top: 3px; color: var(--muted); }
+
+/* ============================================================
+   MAP — kept as the primary visual element of this page
+   ============================================================ */
+
 .eta-map-wrapper {
   position: relative;
   width: 100%;
-  height: clamp(320px, 56vh, 580px);
+  height: clamp(320px, 56vh, 560px);
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg-soft);
-  box-shadow: var(--shadow);
-  border-radius: var(--radius);
   overflow: hidden;
 }
 
 #eta-map { width: 100%; height: 100%; }
 
-/* ── Status Strip (Top-Left) ── */
-.eta-status-strip {
+/* ── Route plate overlay (top-left) ── */
+.map-route-overlay {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  padding: 6px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
+  top: 10px;
+  left: 10px;
   z-index: 10;
-  border-radius: var(--radius-sm);
-  backdrop-filter: blur(6px);
+  max-width: min(272px, calc(100% - 20px));
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--blue);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(10, 61, 110, 0.14);
 }
 
-.pulse-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--muted);
+.map-route-overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.map-route-overlay-no {
+  display: inline-grid;
+  place-items: center;
+  width: 20px; height: 20px;
   flex-shrink: 0;
-}
-
-.pulse-dot.active {
-  background-color: var(--blue);
-  box-shadow: 0 0 0 0 rgba(0, 91, 172, 0.7);
-  animation: pulseDot 1.5s infinite cubic-bezier(0.66, 0, 0, 1);
-}
-
-.pulse-dot.success {
-  background-color: var(--success);
-  box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.7);
-  animation: pulseDot 1.5s infinite cubic-bezier(0.66, 0, 0, 1);
-}
-
-.pulse-dot.error {
-  background-color: var(--red);
-}
-
-@keyframes pulseDot {
-  to { box-shadow: 0 0 0 8px rgba(0, 91, 172, 0); }
-}
-
-/* ── Accuracy Badge ── */
-.eta-accuracy-badge {
-  position: absolute;
-  top: 48px;
-  left: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  padding: 4px 9px;
+  border-radius: 2px;
+  background: var(--blue);
+  color: #fff;
   font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  border-radius: var(--radius-sm);
-  z-index: 10;
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.eta-accuracy-badge.accuracy-good {
-  color: var(--success);
-  border-color: #A5D6A7;
-  background: rgba(232, 245, 233, 0.95);
-}
-
-.eta-accuracy-badge.accuracy-moderate {
-  color: var(--blue);
-  border-color: var(--blue-mid);
-  background: rgba(232, 242, 252, 0.95);
-}
-
-.eta-accuracy-badge.accuracy-poor {
-  color: var(--red);
-  border-color: var(--red-mid);
-  background: rgba(254, 236, 236, 0.95);
-}
-
-/* ── Floating Class Panel (over map, top-right) ── */
-.eta-class-panel {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 280px;
-  max-height: calc(100% - 24px);
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
-  border-radius: 0;
-  padding: 14px;
-  z-index: 10;
-  backdrop-filter: blur(8px);
-}
-
-.eta-class-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.eta-class-panel-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
+.map-route-overlay-label {
+  font-size: 10.5px;
+  font-weight: 800;
   letter-spacing: 0.06em;
-}
-
-.eta-class-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-  flex-shrink: 0;
-}
-
-.eta-class-toggle:hover {
-  background: var(--bg-soft);
-  color: var(--text);
-}
-
-.eta-class-toggle i {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2.2;
-  transition: transform var(--transition);
-}
-
-.eta-class-toggle.collapsed i {
-  transform: rotate(-180deg);
-}
-
-.eta-class-panel.collapsed .eta-class-panel-body,
-.eta-class-panel.collapsed .eta-class-panel-status {
-  display: none;
-}
-
-.eta-class-panel.collapsed {
-  padding-bottom: 14px;
-}
-
-.eta-class-panel-body {
-  padding: 4px 0 8px;
-}
-
-.eta-class-panel-day {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--blue);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--text);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.map-route-overlay-sub {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--divider);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Legend (bottom-left) ── */
+.map-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 10;
+  max-width: calc(100% - 20px);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(10, 61, 110, 0.14);
+}
+
+.map-legend-title {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
   margin-bottom: 6px;
 }
 
-.eta-class-panel-course {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text);
-  line-height: 1.2;
-  margin-bottom: 2px;
-}
-
-.eta-class-panel-subject {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
-  line-height: 1.3;
-  margin-bottom: 10px;
-}
-
-.eta-class-panel-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 8px 0;
-}
-
-.eta-class-panel-schedule {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.eta-class-panel-schedule::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235F6368' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
-  background-size: contain;
-  flex-shrink: 0;
-}
-
-.eta-class-panel-location {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.eta-class-panel-location::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235F6368' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'%3E%3C/path%3E%3Ccircle cx='12' cy='10' r='3'%3E%3C/circle%3E%3C/svg%3E") no-repeat center;
-  background-size: contain;
-  flex-shrink: 0;
-}
-
-.eta-class-panel-arrival {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--blue);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.eta-class-panel-arrival::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23005BAC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E") no-repeat center;
-  background-size: contain;
-  flex-shrink: 0;
-}
-
-.eta-class-panel-traffic {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.eta-class-panel-traffic .traffic-source {
-  font-size: 10px;
-  font-weight: 500;
-  opacity: 0.7;
-}
-
-/* Status colours — severity ladder: ON TIME → TIGHT → AT RISK → LATE */
-.eta-status-ok .eta-class-verdict { color: #1B5E20; }
-.eta-status-tight .eta-class-verdict { color: #E65100; }
-.eta-status-risk .eta-class-verdict { color: #BF360C; }
-.eta-status-late .eta-class-verdict { color: #B71C1C; }
-.eta-status-risk { background: rgba(255, 248, 240, 0.98); }
-.eta-status-late { background: rgba(255, 245, 245, 0.98); }
-
-.eta-status-ok .eta-class-margin { color: #1B5E20; }
-.eta-status-tight .eta-class-margin { color: #E65100; }
-.eta-status-risk .eta-class-margin { color: #BF360C; }
-.eta-status-late .eta-class-margin { color: #B71C1C; }
-
-/* Status box at bottom of panel */
-.eta-class-panel-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  margin-top: 8px;
-}
-
-.eta-class-dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.eta-class-verdict {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.eta-class-margin {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-/* ── Floating No-Class Panel ── */
-.eta-noclass-panel {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 260px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  z-index: 10;
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-/* ── LocateMe Map Control ── */
-.eta-locate-control {
-  position: absolute;
-  bottom: 56px;
-  right: 12px;
-  z-index: 10;
-}
-
-.eta-locate-control button {
-  width: 34px !important;
-  height: 34px !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.eta-locate-control button svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* ── Stats Panel ── */
-.eta-stats-panel {
+.map-legend-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  border-radius: 0;
+  gap: 5px;
+  list-style: none;
 }
 
-.eta-stat-box {
-  padding: 14px 16px;
+.map-legend-item {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.eta-stat-box:nth-child(even) {
-  border-right: none;
-}
-
-.eta-stat-box:nth-last-child(-n+2) {
-  border-bottom: none;
-}
-
-.eta-stat-box:last-child {
-  border-right: none;
-}
-
-.eta-stat-label {
-  font-size: 10px;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
-}
-
-.eta-stat-value {
-  font-size: 16px;
-  font-weight: 800;
   color: var(--text);
   line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
-.eta-stat-value br + span {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--muted);
-}
+/* Legend keys are drawn to match the actual map marks, 1:1. */
+.map-legend-key { flex-shrink: 0; display: block; }
 
-/* ── Traffic stat indicator ──
-   Institutional restraint: colour lives ONLY on the small status dot.
-   The label + delay text stay neutral so no whole box reads as "alarmed". */
-.eta-stat-value.traffic-clear,
-.eta-stat-value.traffic-normal,
-.eta-stat-value.traffic-moderate,
-.eta-stat-value.traffic-heavy,
-.eta-stat-value.traffic-severe,
-.eta-stat-value.traffic-unavailable {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px 6px;
-}
-
-.traffic-ind {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-  flex-shrink: 0;
-}
-
-.traffic-label {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--text);
-  letter-spacing: 0.02em;
-}
-
-.traffic-delay {
-  flex-basis: 100%;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-/* The single place traffic colour is expressed */
-.traffic-clear .traffic-ind       { background: #2E7D32; }
-.traffic-normal .traffic-ind      { background: #2E7D32; }
-.traffic-moderate .traffic-ind    { background: #E65100; }
-.traffic-heavy .traffic-ind       { background: #C62828; }
-.traffic-severe .traffic-ind      { background: #B71C1C; }
-.traffic-unavailable .traffic-ind { background: #9AA0A6; }
-
-/* ── Freshness line: "Updated H:MM · source" ── */
-.eta-updated {
-  margin: 0;
-  padding: 2px 2px 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Actions ── */
-.eta-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.eta-actions .btn {
-  flex: 1 1 calc(50% - 10px);
-  min-width: 140px;
-  justify-content: center;
-}
-
-/* ── Map Markers ── */
-
-/* QCU Destination Pin */
-.qcu-marker-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: auto;
-  cursor: pointer;
-  user-select: none;
-}
-
-.qcu-marker-pin {
-  width: 32px;
-  height: 32px;
-  background: #FFFFFF;
+.map-legend-key--campus {
+  width: 11px; height: 11px;
   border: 3px solid var(--blue);
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 3px 8px rgba(0, 91, 172, 0.35);
-  margin-bottom: 0px;
+  background: #fff;
 }
 
-.qcu-marker-pin::after {
+.map-legend-key--terminus {
+  width: 11px; height: 11px;
+  border: 3px solid var(--navy);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #fff;
+}
+
+.map-legend-key--route {
+  width: 16px; height: 4px;
+  border-radius: 1px;
+  background: var(--blue);
+}
+
+.map-legend-key--stop {
+  width: 9px; height: 9px;
+  border: 2px solid var(--blue);
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ── Map markers ── */
+.qcu-marker-container,
+.terminus-marker-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: default;
+  user-select: none;
+}
+
+.qcu-marker-pin,
+.terminus-marker-pin {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border: 3px solid var(--blue);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 6px rgba(10, 61, 110, 0.32);
+}
+
+.qcu-marker-pin::after,
+.terminus-marker-pin::after {
   content: "";
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   background: var(--blue);
   border-radius: 50%;
   transform: rotate(45deg);
 }
 
-.qcu-marker-label {
-  background: var(--blue);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 3px;
+.terminus-marker-pin { border-color: var(--navy); }
+.terminus-marker-pin::after { background: var(--navy); }
+
+.qcu-marker-label,
+.terminus-marker-label {
   margin-top: 5px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   white-space: nowrap;
   box-shadow: var(--shadow-sm);
-  letter-spacing: 0.04em;
+}
+
+.terminus-marker-label { background: var(--navy); }
+
+/* Stop dots are drawn as a MapLibre circle layer; this styles their popups. */
+.maplibregl-popup-content {
+  padding: 7px 10px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 3px !important;
+  box-shadow: 0 2px 8px rgba(10, 61, 110, 0.18) !important;
+  font-family: inherit;
+}
+
+.map-stop-popup-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.map-stop-popup-kind {
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  color: var(--muted);
 }
 
-/* User Location Dot */
-.user-marker-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  pointer-events: none;
+.maplibregl-popup-close-button {
+  width: 22px; height: 22px;
+  font-size: 15px;
+  color: var(--muted);
+  border-radius: 2px;
 }
+.maplibregl-popup-close-button:hover { background: var(--bg-soft); color: var(--text); }
 
-.user-marker-core {
-  width: 16px;
-  height: 16px;
-  background: #005BAC;
-  border: 2.5px solid #FFFFFF;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px rgba(0, 91, 172, 0.5), 0 2px 6px rgba(0,0,0,0.3);
-  position: relative;
-  z-index: 2;
-}
-
-.user-marker-pulse {
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(0, 91, 172, 0.3);
-  animation: userPulse 2s infinite cubic-bezier(0.25, 1, 0.5, 1);
-  z-index: 1;
-}
-
-@keyframes userPulse {
-  0% { transform: scale(0.6); opacity: 0.9; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-
-/* ── MapLibre Controls ── */
-.maplibregl-ctrl-bottom-right {
-  bottom: 12px !important;
-  right: 12px !important;
-}
+/* ── MapLibre chrome, themed to the app ── */
+.maplibregl-ctrl-bottom-right { bottom: 10px !important; right: 10px !important; }
 
 .maplibregl-ctrl-group {
-  border-radius: var(--radius-sm) !important;
-  box-shadow: var(--shadow) !important;
   border: 1px solid var(--border) !important;
+  border-radius: 3px !important;
+  box-shadow: var(--shadow) !important;
   overflow: hidden;
 }
 
-.maplibregl-ctrl-group button {
-  width: 34px !important;
-  height: 34px !important;
+.maplibregl-ctrl-group button { width: 32px !important; height: 32px !important; }
+.maplibregl-ctrl-group button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; box-shadow: none !important; }
+.maplibregl-ctrl-attrib { font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: var(--muted); }
+
+/* Map fallback when tiles or WebGL are unavailable. */
+.map-unavailable {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 20px;
+  text-align: center;
+  background: var(--bg-soft);
 }
 
-/* ── Desktop ── */
+.map-unavailable i, .map-unavailable svg {
+  width: 22px; height: 22px; color: var(--muted); stroke-width: 2;
+}
+
+.map-unavailable-title { font-size: 13px; font-weight: 800; color: var(--text); }
+.map-unavailable-desc { font-size: 11.5px; font-weight: 600; color: var(--muted); max-width: 34ch; line-height: 1.5; }
+
+/* ============================================================
+   SCHEDULE CARD — tabs + scheduled-departure list
+   ============================================================ */
+
+.bus-sched-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 11px;
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+}
+
+.bus-sched-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 4px 8px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  text-align: center;
+  min-width: 0;
+  transition: color var(--transition), background-color var(--transition), border-color var(--transition);
+}
+
+.bus-sched-tab-name {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.bus-sched-tab-meta {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.bus-sched-tab:hover { background: var(--bg-soft); color: var(--text); }
+.bus-sched-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.bus-sched-tab[aria-selected="true"] {
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-bottom-color: var(--blue);
+}
+
+.bus-sched-tab[aria-selected="true"] .bus-sched-tab-meta { color: var(--blue); }
+
+.bus-sched-tab[disabled] { color: var(--fn-slate); opacity: 0.55; cursor: default; }
+.bus-sched-tab[disabled]:hover { background: none; color: var(--fn-slate); }
+
+/* ── Panel body ── */
+.bus-sched-body { padding-top: 10px; }
+
+.bus-sched-list-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.bus-sched-list-count { font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+
+/* Scroll container — hairline framed, own scrollbar theming. */
+.bus-sched-scroll {
+  max-height: 208px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--blue-mid) transparent;
+}
+
+.bus-sched-scroll::-webkit-scrollbar { width: 9px; }
+.bus-sched-scroll::-webkit-scrollbar-track { background: transparent; }
+.bus-sched-scroll::-webkit-scrollbar-thumb {
+  background: var(--blue-mid);
+  border: 3px solid var(--bg);
+  border-radius: 5px;
+}
+.bus-sched-scroll::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+
+.bus-sched-rows { list-style: none; }
+
+.bus-sched-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--divider);
+  min-width: 0;
+}
+
+.bus-sched-row:last-child { border-bottom: none; }
+
+.bus-sched-seq {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  flex-shrink: 0;
+}
+
+.bus-sched-time {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+
+.bus-sched-dir {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.bus-sched-foot {
+  margin-top: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Direction rows: what QC actually publishes per direction ── */
+.bus-sched-dirrow {
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--divider);
+  min-width: 0;
+}
+
+.bus-sched-dirrow:last-child { border-bottom: none; }
+
+.bus-sched-dirrow-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--blue);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.bus-sched-dirrow-times {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  margin-top: 7px;
+}
+
+.bus-sched-dirrow-slot { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.bus-sched-dirrow-k {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.bus-sched-dirrow-v {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.bus-sched-dirrow-rule { width: 1px; background: var(--divider); flex-shrink: 0; }
+
+.bus-sched-dirrow-headway {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.bus-sched-dirrow-note {
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Badge falls back to neutral when the schedule state is not a known one. */
+.bus-free-badge--muted {
+  border-color: var(--border);
+  background: var(--bg-soft);
+  color: var(--fn-slate);
+}
+
+/* ── Operating-window state: QC publishes hours + interval, not clock times ── */
+.bus-window {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.bus-window-cell {
+  padding: 9px 11px;
+  min-width: 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.bus-window-cell:nth-child(odd) { border-right: 1px solid var(--divider); }
+.bus-window-cell:nth-last-child(-n+2) { border-bottom: none; }
+
+.bus-window-k {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.bus-window-v {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.bus-window-v--sm { font-size: 12.5px; font-weight: 700; }
+.bus-window-v--unknown { font-size: 12.5px; font-weight: 700; color: var(--fn-slate); font-style: italic; }
+
+/* ── Empty / unavailable states ── */
+.bus-sched-empty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 22px 16px;
+  text-align: center;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.bus-sched-empty i, .bus-sched-empty svg {
+  width: 20px; height: 20px; color: var(--fn-slate); stroke-width: 2;
+}
+
+.bus-sched-empty-title { font-size: 13px; font-weight: 800; color: var(--text); }
+.bus-sched-empty-desc { font-size: 11.5px; font-weight: 600; color: var(--muted); max-width: 38ch; line-height: 1.5; }
+
+/* ── Loading skeleton ── */
+.bus-skeleton {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.bus-skeleton-bar {
+  height: 12px;
+  border-radius: 2px;
+  background: var(--bg-soft);
+  animation: busSkeleton 1.4s ease-in-out infinite;
+}
+
+.bus-skeleton-bar:nth-child(2) { width: 78%; animation-delay: 0.12s; }
+.bus-skeleton-bar:nth-child(3) { width: 56%; animation-delay: 0.24s; }
+
+@keyframes busSkeleton {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ============================================================
+   ABOUT CARD
+   ============================================================ */
+
+.bus-about-lead {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.bus-about-list {
+  display: grid;
+  gap: 0;
+  margin-top: 10px;
+  list-style: none;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.bus-about-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--divider);
+  min-width: 0;
+}
+
+.bus-about-item:last-child { border-bottom: none; }
+
+.bus-about-item i, .bus-about-item svg {
+  width: 15px; height: 15px; flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--blue);
+  stroke-width: 2;
+}
+
+.bus-about-item-text { min-width: 0; }
+
+.bus-about-item-k {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.bus-about-item-d {
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* ── Source / official link footer ── */
+.bus-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.bus-source-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bus-source-note i, .bus-source-note svg { width: 12px; height: 12px; stroke-width: 2; flex-shrink: 0; }
+.bus-source-note time { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.bus-official-link { border-radius: 3px; }
+
+/* ============================================================
+   MOTION — one authored moment: the schedule panel changing day.
+   Rows arrive on an exponential ease-out from an already-visible
+   default, so a no-JS or reduced-motion render is fully legible.
+   ============================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .bus-sched-body[data-enter] > * {
+    animation: busPanelIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .bus-sched-body[data-enter] .bus-sched-row,
+  .bus-sched-body[data-enter] .bus-sched-dirrow {
+    animation: busRowIn 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 22ms);
+  }
+
+  @keyframes busPanelIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @keyframes busRowIn {
+    from { opacity: 0; transform: translateY(6px); filter: blur(1.5px); }
+    to   { opacity: 1; transform: none; filter: none; }
+  }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
 @media (min-width: 720px) {
-  .eta-map-wrapper { height: 560px; }
-  .eta-class-panel { width: 300px; }
-  .eta-noclass-panel { width: 300px; }
-  .eta-stats-panel { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .eta-stat-box { border-bottom: none; }
-  .eta-stat-box:nth-child(even) { border-right: 1px solid var(--border); }
-  .eta-stat-box:last-child { border-right: none; }
-  .eta-stat-value { font-size: 18px; }
-  .eta-actions .btn { flex: none; width: auto; padding-left: 18px; padding-right: 18px; }
+  .eta-map-wrapper { height: 520px; }
+  .bus-sched-scroll { max-height: 268px; }
+  .bus-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; }
+  .bus-facts .bus-fact:nth-last-child(-n+2) { border-bottom: none; }
+  .bus-about-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bus-about-item:nth-child(odd) { border-right: 1px solid var(--divider); }
+  .bus-about-item:nth-child(4) { border-bottom: none; }
+  .bus-about-item:nth-child(5) { grid-column: 1 / -1; border-right: none; }
+  .bus-official-link { width: auto; }
 }
 
-/* ── Tablet / Small Desktop ── */
-@media (max-width: 719px) and (min-width: 481px) {
-  .eta-class-panel { width: 260px; }
-  .eta-stats-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 719px) {
+  .bus-official-link { width: 100%; justify-content: center; }
 }
 
-/* ── Mobile ── */
 @media (max-width: 480px) {
-  .eta-map-wrapper { height: clamp(300px, 50vh, 480px); }
-  
-  .eta-class-panel {
-    top: auto;
-    bottom: 12px;
-    right: 12px;
-    left: 12px;
-    width: auto;
-    max-height: 45vh;
-    padding: 12px;
-    border-radius: 0;
-  }
-
-  .eta-noclass-panel {
-    top: auto;
-    bottom: 12px;
-    right: 12px;
-    left: 12px;
-    width: auto;
-    padding: 12px;
-    border-radius: 0;
-  }
-
-  .eta-class-panel-course { font-size: 15px; }
-  .eta-class-panel-subject { font-size: 12px; }
-  .eta-class-panel-schedule { font-size: 12px; }
-  .eta-class-panel-location { font-size: 11px; }
-  .eta-class-panel-arrival { font-size: 12px; }
-  .eta-class-panel-traffic { font-size: 10px; }
-  
-  .eta-class-verdict { font-size: 10px; }
-  .eta-class-margin { font-size: 10px; }
-  
-  .eta-locate-control { bottom: 12px; right: 12px; }
-  
-  .eta-actions .btn {
-    flex: 1 1 calc(50% - 10px);
-    min-width: 0;
-    font-size: 12px;
-    padding: 10px 12px;
-  }
+  .eta-map-wrapper { height: clamp(300px, 48vh, 440px); }
+  .bus-panel { padding: 11px 12px 10px; }
+  .bus-page-mark { width: 36px; height: 36px; }
+  .bus-page-mark i, .bus-page-mark svg { width: 20px; height: 20px; }
+  .bus-route-corridor { font-size: 13px; }
+  .bus-sched-scroll { max-height: 192px; }
+  /* Strips, not floating cards: the corridor is a tall ribbon on a portrait
+     map, so the chrome moves out of its way instead of sitting beside it. */
+  .map-route-overlay { left: 8px; right: 8px; top: 8px; max-width: none; padding: 7px 9px; }
+  .map-legend { left: 8px; right: 50px; bottom: 8px; max-width: none; padding: 7px 9px; }
+  .map-legend-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; row-gap: 4px; }
+  .maplibregl-ctrl-bottom-right { bottom: 8px !important; right: 8px !important; }
 }
 
-/* ── Small Mobile (320px, 375px, 390px) ── */
 @media (max-width: 390px) {
-  .eta-status-strip { font-size: 11px; padding: 5px 10px; }
-  .eta-accuracy-badge { font-size: 10px; top: 42px; }
-  
-  .eta-class-panel {
-    padding: 10px;
-  }
-  
-  .eta-class-panel-course { font-size: 14px; }
-  .eta-class-panel-subject { font-size: 11px; }
-  .eta-class-panel-schedule { font-size: 11px; }
-  .eta-class-panel-location { font-size: 10px; }
-  .eta-class-panel-arrival { font-size: 11px; }
-  
-  .eta-stats-panel { gap: 0; }
-  .eta-stat-box { padding: 10px 8px; }
-  .eta-stat-label { font-size: 9px; }
-  .eta-stat-value { font-size: 14px; }
-  
-  .eta-actions .btn {
-    flex: 1 1 100%;
-    min-width: 0;
-  }
+  .bus-fact-k { font-size: 10px; }
+  .bus-fact-v { font-size: 12px; }
+  .bus-route-no { width: 34px; height: 34px; font-size: 17px; }
+  .bus-window-v { font-size: 14px; }
+  .bus-sched-tab-name { font-size: 10px; }
+  .bus-about-item-k { font-size: 12px; }
 }
 
-/* ── Ultra Small Mobile (320px) ── */
-@media (max-width: 320px) {
-  .eta-map-wrapper { height: 280px; }
-  
-  .eta-class-panel-course { font-size: 13px; }
-  .eta-class-panel-subject { font-size: 10px; }
-  .eta-class-panel-day { font-size: 10px; }
+@media (max-width: 340px) {
+  .eta-map-wrapper { height: 268px; }
+  .bus-window { grid-template-columns: minmax(0, 1fr); }
+  .bus-window-cell:nth-child(odd) { border-right: none; }
+  .bus-window-cell:nth-last-child(-n+2) { border-bottom: 1px solid var(--divider); }
+  .bus-window-cell:last-child { border-bottom: none; }
+  .bus-fact { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .bus-fact-v { text-align: left; }
+  .map-legend-list { grid-template-columns: minmax(0, 1fr); }
+  .map-legend { max-width: calc(100% - 16px); }
+  .bus-sched-dir { display: none; }
+  .bus-sched-dirrow-v { font-size: 15px; }
+}
+
+/* ── Print: the schedule is the thing worth carrying offline ── */
+@media print {
+  .eta-map-wrapper, .bus-official-link { display: none; }
+  .bus-sched-scroll { max-height: none; overflow: visible; }
+  .bus-panel { border-top-width: 2px; break-inside: avoid; }
 }

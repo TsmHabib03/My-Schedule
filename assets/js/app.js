@@ -231,7 +231,7 @@ function orderedSchedule(now = new Date()) {
 function renderShell() {
   const navItems = [
     ["home",      "index.html",     "layout-dashboard", "Home"],
-    ["campus-eta", "campus-eta.html", "navigation",      "ETA"],
+    ["campus-eta", "campus-eta.html", "bus",             "Bus"],
 
     ["workspace", "workspace.html", "clipboard-list",   "Tasks & Notes"],
     ["google",    "google.html",    "graduation-cap",   "Google"],

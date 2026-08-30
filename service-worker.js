@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcu-schedule-v50";
+const CACHE_NAME = "qcu-schedule-v51";
 const STATIC_ASSETS = [
   "./",
   "index.html",
@@ -25,7 +25,9 @@ const STATIC_ASSETS = [
   "assets/images/Belmonte Building 2.jpg",
   "assets/images/New Academic building(1).jpg",
   "assets/images/Techboc HB bautista.jpg",
-  "data/buildings.json"
+  "data/buildings.json",
+  "data/qcity-bus.json",
+  "data/route4-corridor.json"
 ];
 
 // Data files that should NOT be cached (always fetch fresh)

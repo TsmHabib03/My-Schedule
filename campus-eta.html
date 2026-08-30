@@ -1,14 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#005BAC">
-  <meta name="description" content="Live Campus ETA for Quezon City University ??? real-time route and arrival estimates to San Bartolome Main Campus.">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <title>Live Campus ETA | QCU Portal</title>
+  <meta name="description" content="QCity Bus Libreng Sakay information for QCU San Bartolome commuters — Route 4 (QC Hall ↔ General Luis) corridor, published schedule, fare and stops. Schedule-based; no live bus tracking.">
+  <title>QCity Bus · Libreng Sakay | QCU Portal</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/jpeg" href="assets/images/QCU college of computer studies logo.jpg">
   <link rel="apple-touch-icon" href="assets/images/QCU college of computer studies logo.jpg">
@@ -18,10 +15,10 @@
 
   <!-- MapLibre GL JS -->
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-  
+
   <!-- CSS -->
-  <link rel="stylesheet" href="assets/css/styles.css?v=44">
-  <link rel="stylesheet" href="assets/css/eta.css?v=39">
+  <link rel="stylesheet" href="assets/css/styles.css?v=45">
+  <link rel="stylesheet" href="assets/css/eta.css?v=40">
 </head>
 <body data-page="campus-eta">
   <div class="app-shell">
@@ -29,110 +26,208 @@
 
     <main class="page-container section-stack">
 
-      <!-- Header Card matching Tasks page pattern -->
+      <!-- ── Page header ─────────────────────────────────────── -->
       <section class="portal-card">
-        <h1 class="page-title">Live Campus ETA</h1>
-        <p class="caption" style="margin-top:4px;">Track your route to QCU San Bartolome Campus in real-time.</p>
+        <div class="bus-page-head">
+          <span class="bus-page-mark" aria-hidden="true"><i data-lucide="bus"></i></span>
+          <div class="bus-page-headings">
+            <div class="bus-title-row">
+              <h1 class="page-title">QCity Bus · Libreng Sakay</h1>
+              <span class="bus-free-badge"><i data-lucide="ticket" aria-hidden="true"></i> Free ride</span>
+            </div>
+            <p class="caption" style="margin-top:4px;">
+              Find useful information about the free QCity Bus serving routes near QCU San Bartolome.
+            </p>
+          </div>
+        </div>
       </section>
 
-      <!-- Accuracy / Device Guidance Alert (Shown dynamically when GPS accuracy is low or estimated via ISP) -->
-      <section id="eta-accuracy-alert" class="portal-card eta-accuracy-alert" style="display:none;">
-        <div class="eta-alert-header">
-          <span class="status-pill status-off" id="eta-alert-pill">
-            <i data-lucide="alert-triangle"></i> Location Accuracy Notice
+      <!-- ── Route 4 information ─────────────────────────────── -->
+      <section class="bus-panel" aria-labelledby="bus-route-heading">
+        <div class="bus-route-ident">
+          <span class="bus-route-no" aria-hidden="true">4</span>
+          <div class="bus-route-ident-text">
+            <h2 class="bus-route-corridor" id="bus-route-heading">
+              <span class="bus-sr">Route 4 · </span>QC Hall ↔ General Luis
+            </h2>
+            <p class="bus-route-anchor">QCU San Bartolome</p>
+          </div>
+        </div>
+
+        <p class="bus-route-note">
+          Route&nbsp;4 runs Mindanao Avenue onto Quirino Highway through Novaliches before turning
+          into General&nbsp;Luis Street. <strong>QCU Main Campus is one of its 15 designated
+          stops</strong> — the 10th heading to General&nbsp;Luis, the 6th heading back to QC&nbsp;Hall —
+          so both directions serve the campus.
+        </p>
+
+        <dl class="bus-facts">
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Route</dt>
+            <dd class="bus-fact-v">4</dd>
+          </div>
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Direction</dt>
+            <dd class="bus-fact-v">QC Hall ↔ General Luis</dd>
+          </div>
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Fare</dt>
+            <dd class="bus-fact-v bus-fact-v--free">Free</dd>
+          </div>
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Service</dt>
+            <dd class="bus-fact-v bus-fact-v--muted">QCity Bus · Libreng Sakay</dd>
+          </div>
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Frequency</dt>
+            <dd class="bus-fact-v" id="bus-fact-frequency">—</dd>
+          </div>
+          <div class="bus-fact">
+            <dt class="bus-fact-k">Status</dt>
+            <dd class="bus-fact-v bus-fact-v--muted">Schedule-based · No live bus tracking</dd>
+          </div>
+        </dl>
+
+        <div class="bus-advisory">
+          <i data-lucide="locate-off" class="bus-advisory-icon" aria-hidden="true"></i>
+          <div>
+            <p><strong>No live bus tracking available.</strong></p>
+            <p>Schedules and intervals may change depending on QCity Bus operations and advisories.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Map: primary visual element ─────────────────────── -->
+      <div class="eta-map-wrapper">
+        <div id="eta-map" role="img"
+             aria-label="Map of the QCity Bus Route 4 corridor between Quezon City Hall and General Luis Street, showing the QCU San Bartolome campus on Quirino Highway."></div>
+
+        <div class="map-route-overlay">
+          <div class="map-route-overlay-head">
+            <span class="map-route-overlay-no" aria-hidden="true">4</span>
+            <span class="map-route-overlay-label">QCity Bus corridor</span>
+          </div>
+          <p class="map-route-overlay-sub" id="map-route-overlay-sub">
+            Road path between the published Route&nbsp;4 endpoints — indicative, not a live bus position.
+          </p>
+        </div>
+
+        <div class="map-legend">
+          <p class="map-legend-title" id="map-legend-title">Legend</p>
+          <ul class="map-legend-list" aria-labelledby="map-legend-title">
+            <li class="map-legend-item"><span class="map-legend-key map-legend-key--campus" aria-hidden="true"></span> QCU Campus</li>
+            <li class="map-legend-item"><span class="map-legend-key map-legend-key--route" aria-hidden="true"></span> QCity Bus Route</li>
+            <li class="map-legend-item"><span class="map-legend-key map-legend-key--stop" aria-hidden="true"></span> Bus Stop</li>
+            <li class="map-legend-item"><span class="map-legend-key map-legend-key--terminus" aria-hidden="true"></span> Terminus</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── Route 4 schedule ────────────────────────────────── -->
+      <section class="bus-panel" aria-labelledby="bus-sched-heading">
+        <div class="bus-panel-head">
+          <span class="bus-panel-title-group">
+            <i data-lucide="calendar-clock" class="bus-panel-icon" aria-hidden="true"></i>
+            <h2 class="bus-panel-title" id="bus-sched-heading">Route 4 Schedule</h2>
+          </span>
+          <span class="bus-free-badge" id="bus-sched-badge">Published</span>
+        </div>
+
+        <div class="bus-sched-tabs" role="tablist" aria-label="Route 4 service days">
+          <button class="bus-sched-tab" type="button" role="tab" id="bus-tab-weekdays"
+                  aria-controls="bus-sched-body" aria-selected="true" data-day="weekdays">
+            <span class="bus-sched-tab-name">Weekdays</span>
+            <span class="bus-sched-tab-meta" data-day-meta="weekdays">—</span>
+          </button>
+          <button class="bus-sched-tab" type="button" role="tab" id="bus-tab-saturday"
+                  aria-controls="bus-sched-body" aria-selected="false" tabindex="-1" data-day="saturday">
+            <span class="bus-sched-tab-name">Saturday</span>
+            <span class="bus-sched-tab-meta" data-day-meta="saturday">—</span>
+          </button>
+          <button class="bus-sched-tab" type="button" role="tab" id="bus-tab-sunday"
+                  aria-controls="bus-sched-body" aria-selected="false" tabindex="-1" data-day="sunday">
+            <span class="bus-sched-tab-name">Sunday</span>
+            <span class="bus-sched-tab-meta" data-day-meta="sunday">—</span>
+          </button>
+        </div>
+
+        <div class="bus-sched-body" id="bus-sched-body" role="tabpanel"
+             aria-labelledby="bus-tab-weekdays" aria-live="polite">
+          <div class="bus-skeleton" aria-hidden="true">
+            <span class="bus-skeleton-bar"></span>
+            <span class="bus-skeleton-bar"></span>
+            <span class="bus-skeleton-bar"></span>
+          </div>
+        </div>
+
+        <p class="bus-sched-foot">
+          Schedule may change — check official QC advisories for updates.
+        </p>
+      </section>
+
+      <!-- ── About Libreng Sakay ─────────────────────────────── -->
+      <section class="bus-panel bus-panel--muted" aria-labelledby="bus-about-heading">
+        <div class="bus-panel-head">
+          <span class="bus-panel-title-group">
+            <i data-lucide="info" class="bus-panel-icon" aria-hidden="true"></i>
+            <h2 class="bus-panel-title" id="bus-about-heading">QCity Bus Libreng Sakay</h2>
           </span>
         </div>
-        <div class="eta-alert-body" style="margin-top:8px;">
-          <p class="eta-alert-title" id="eta-alert-title">
-            Location accuracy is low (<span id="eta-alert-radius">??1.5 km</span>)
+
+        <p class="bus-about-lead">
+          Free public transportation provided by the Quezon City Government for QC commuters.
+        </p>
+
+        <ul class="bus-about-list">
+          <li class="bus-about-item">
+            <i data-lucide="bus" aria-hidden="true"></i>
+            <div class="bus-about-item-text">
+              <p class="bus-about-item-k" id="bus-about-routes">QCity Bus routes</p>
+              <p class="bus-about-item-d">A city-wide network radiating from Quezon City Hall.</p>
+            </div>
+          </li>
+          <li class="bus-about-item">
+            <i data-lucide="ticket" aria-hidden="true"></i>
+            <div class="bus-about-item-text">
+              <p class="bus-about-item-k">Free ride</p>
+              <p class="bus-about-item-d" id="bus-about-fare-note">No fare, no beep card, no tap-in required.</p>
+            </div>
+          </li>
+          <li class="bus-about-item">
+            <i data-lucide="map-pin" aria-hidden="true"></i>
+            <div class="bus-about-item-text">
+              <p class="bus-about-item-k">Route 4: QC Hall ↔ General Luis</p>
+              <p class="bus-about-item-d">Passes QCU San Bartolome along Quirino Highway.</p>
+            </div>
+          </li>
+          <li class="bus-about-item" id="bus-about-wifi">
+            <i data-lucide="wifi" aria-hidden="true"></i>
+            <div class="bus-about-item-text">
+              <p class="bus-about-item-k">Free Wi-Fi onboard</p>
+              <p class="bus-about-item-d">Required on every Route 4 unit, alongside air conditioning.</p>
+            </div>
+          </li>
+          <li class="bus-about-item">
+            <i data-lucide="calendar-days" aria-hidden="true"></i>
+            <div class="bus-about-item-text">
+              <p class="bus-about-item-k">Operates according to published schedules</p>
+              <p class="bus-about-item-d">Service hours follow QC Government advisories, not a live feed.</p>
+            </div>
+          </li>
+        </ul>
+
+        <div class="bus-source">
+          <p class="bus-source-note">
+            <i data-lucide="shield-check" aria-hidden="true"></i>
+            Route and schedule details from the Quezon City Government · checked
+            <time id="bus-source-date" datetime="">—</time>
           </p>
-          <p class="caption" id="eta-alert-desc" style="margin-top:4px; line-height:1.5;">
-            Laptops without dedicated GPS hardware estimate location via Wi-Fi networks or your ISP gateway (which may resolve to another district such as Valenzuela). Enable Windows Location Services and connect to Wi-Fi for a more accurate fix.
-          </p>
+          <a class="btn btn-primary bus-official-link" id="bus-official-link"
+             href="https://quezoncity.gov.ph/" target="_blank" rel="noopener noreferrer">
+            <i data-lucide="external-link" aria-hidden="true"></i> Official QCity Bus Info
+          </a>
         </div>
       </section>
-
-      <!-- Main ETA Section: Map, Stats & Controls -->
-      <div class="eta-content section-stack" style="gap:16px;">
-        <!-- Map Container -->
-        <div class="eta-map-wrapper">
-          <div id="eta-map"></div>
-          <div class="eta-status-strip" id="eta-status-strip">
-            <span class="pulse-dot" id="eta-status-dot"></span>
-            <span id="eta-status-text">Acquiring device location???</span>
-          </div>
-          <div class="eta-accuracy-badge" id="eta-accuracy-badge" style="display: none;">
-            <span id="eta-accuracy-val">--</span>
-          </div>
-
-          <!-- Floating Class Panel ??? inside map wrapper -->
-          <div class="eta-class-panel" id="eta-class-banner" style="display:none;">
-            <div class="eta-class-panel-header">
-              <p class="eta-class-panel-label">Next Class</p>
-              <button class="eta-class-toggle" id="eta-class-toggle" type="button" aria-label="Collapse class panel" title="Collapse">
-                <i data-lucide="chevron-down"></i>
-              </button>
-            </div>
-            <div class="eta-class-panel-body" id="eta-class-body">
-              <p class="eta-class-panel-day" id="eta-class-day">--</p>
-              <p class="eta-class-panel-course" id="eta-class-course">--</p>
-              <p class="eta-class-panel-subject" id="eta-class-subject">--</p>
-              <div class="eta-class-panel-divider"></div>
-              <p class="eta-class-panel-schedule" id="eta-class-schedule">--</p>
-              <p class="eta-class-panel-location" id="eta-class-location">--</p>
-              <div class="eta-class-panel-divider"></div>
-              <p class="eta-class-panel-arrival" id="eta-class-arrival">--</p>
-              <div class="eta-class-panel-divider"></div>
-              <div class="eta-class-panel-traffic" id="eta-class-traffic"></div>
-            </div>
-            <div class="eta-class-panel-status" id="eta-class-status-box">
-              <span class="eta-class-dot" id="eta-class-dot"></span>
-              <span class="eta-class-verdict" id="eta-class-verdict">--</span>
-              <span class="eta-class-margin" id="eta-class-margin">--</span>
-            </div>
-          </div>
-
-          <!-- No-class floating banner -->
-          <div class="eta-noclass-panel" id="eta-noclass-banner" style="display:none;">
-            <i data-lucide="calendar-off" style="width:16px;height:16px;color:var(--muted);flex-shrink:0;"></i>
-            <span id="eta-noclass-text">No upcoming classes.</span>
-          </div>
-        </div>
-
-        <!-- Stats Panel -->
-        <div class="eta-stats-panel">
-          <div class="eta-stat-box">
-            <p class="eta-stat-label">Normal ETA</p>
-            <p class="eta-stat-value" id="eta-val-static">--</p>
-          </div>
-          <div class="eta-stat-box">
-            <p class="eta-stat-label">Current ETA</p>
-            <p class="eta-stat-value" id="eta-val-time">--</p>
-          </div>
-          <div class="eta-stat-box">
-            <p class="eta-stat-label">Distance</p>
-            <p class="eta-stat-value" id="eta-val-dist">--</p>
-          </div>
-          <div class="eta-stat-box">
-            <p class="eta-stat-label">Traffic</p>
-            <p class="eta-stat-value" id="eta-val-status" style="font-size: 13px;">--</p>
-          </div>
-        </div>
-
-        <!-- Freshness line ??? always shows when the estimate was last computed and its source -->
-        <p class="eta-updated" id="eta-updated" aria-live="polite"></p>
-
-        <!-- Actions Toolbar -->
-        <div class="eta-actions">
-          <button class="btn btn-primary" id="btn-eta-locate" type="button" aria-label="Get fresh location and recenter">
-            <i data-lucide="locate"></i> Locate Me
-          </button>
-          <button class="btn btn-secondary" id="btn-eta-toggle" type="button" aria-label="Pause or resume tracking" style="display:none;">
-            <i data-lucide="pause"></i> Stop Tracking
-          </button>
-        </div>
-
-      </div>
 
     </main>
 
@@ -145,11 +240,9 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
-  <!-- App & ETA Scripts -->
-  <script src="assets/js/app.js?v=40"></script>
-  <script src="assets/js/eta.js?v=39"></script>
-  <script>
-    initETA();
-  </script>
+  <!-- App & page scripts -->
+  <script src="assets/js/app.js?v=41"></script>
+  <script src="assets/js/eta.js?v=40"></script>
+  <script>initETA();</script>
 </body>
 </html>
