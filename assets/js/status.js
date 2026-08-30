@@ -719,14 +719,14 @@
   // fabricated reading. On a total data outage a calm "Monitoring" state shows,
   // never the word "unavailable" and never a false "no flood risk".
   var FLOOD_META = {
-    EXTREME:  { cls: "is-extreme",  label: "High flood risk",     icon: "alert-triangle" },
-    SEVERE:   { cls: "is-severe",   label: "High flood risk",     icon: "alert-triangle" },
-    ELEVATED: { cls: "is-elevated", label: "Moderate flood risk", icon: "alert-triangle" },
-    NONE:     { cls: "is-none",     label: "Low flood risk",      icon: "waves" },
+    EXTREME:  { cls: "is-extreme",  label: "EXTREME",  chipCls: "flood-chip--red",    icon: "droplets",     severityIcon: "alert-triangle" },
+    SEVERE:   { cls: "is-severe",   label: "SEVERE",   chipCls: "flood-chip--red",    icon: "droplets",     severityIcon: "alert-triangle" },
+    ELEVATED: { cls: "is-elevated", label: "ELEVATED", chipCls: "flood-chip--amber",  icon: "droplets",     severityIcon: "trending-up" },
+    NONE:     { cls: "is-none",     label: "LOW",      chipCls: "flood-chip--blue",   icon: "droplets",     severityIcon: "waves" },
     // Never "unavailable": on a total data outage we show a calm, honest
     // "Monitoring" state — we don't fabricate a LOW reading, but we never
     // alarm or read as an error either.
-    UNKNOWN:  { cls: "is-unknown",  label: "Monitoring",          icon: "activity" }
+    UNKNOWN:  { cls: "is-unknown",  label: "MONITORING", chipCls: "flood-chip--slate", icon: "activity",     severityIcon: "activity" }
   };
   var FLOOD_TIP = {
     EXTREME:  "Extreme flood risk reported — avoid flood-prone roads and low-lying areas. Follow PAGASA / QC DRRMO advisories.",
@@ -736,42 +736,126 @@
     UNKNOWN:  "Awaiting live flood data — check PAGASA and QC DRRMO before travelling in heavy rain."
   };
   var FLOOD_TREND = { RISING: "Rising", FALLING: "Falling", STABLE: "Stable" };
+  var FLOOD_TREND_ICON = { RISING: "trending-up", FALLING: "trending-down", STABLE: "minus" };
+  var FLOOD_TREND_CLS = { RISING: "trend--rising", FALLING: "trend--falling", STABLE: "trend--stable" };
+  // Issued timestamp in "HH:MM MMM D" format for gauge data.
+  function fmtIssuedTime(d) {
+    if (!d) return "";
+    try {
+      var dt = new Date(d);
+      if (isNaN(dt.getTime())) return fmtStamp(d);
+      var time = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: false
+      }).format(dt);
+      var date = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila", month: "short", day: "numeric"
+      }).format(dt);
+      return time + " " + date;
+    } catch (e) { return fmtStamp(d); }
+  }
+  // Metric row — label left, value right, separated by a hairline divider.
+  function floodMetricRow(label, value) {
+    return '<div class="flood-metric">' +
+      '<span class="flood-metric-k">' + esc(label) + '</span>' +
+      '<span class="flood-metric-v">' + value + '</span>' +
+    '</div>';
+  }
+  // Trend value with inline color-coded icon + text.
+  function floodTrendValue(trend) {
+    var t = String(trend || "").toUpperCase();
+    var icon = FLOOD_TREND_ICON[t];
+    var cls = FLOOD_TREND_CLS[t];
+    var label = FLOOD_TREND[t] || String(trend || "");
+    return (icon
+      ? '<span class="flood-trend ' + esc(cls) + '"><i data-lucide="' + icon + '" aria-hidden="true"></i>' + esc(label) + '</span>'
+      : esc(label));
+  }
 
   function floodBlockHTML(flood) {
     var lvl = (flood && flood.riskLevel) ? String(flood.riskLevel).toUpperCase() : "UNKNOWN";
     var m = FLOOD_META[lvl] || FLOOD_META.UNKNOWN;
-    var metrics = [];
     var isGoogle = !!(flood && flood.provider === "google");
-    // Google Flood Forecasting — authoritative gauge metrics.
+    var isRainfallOnly = !!(flood && flood.derived);
+
+    // ── Header ──
+    var headerIcon = isGoogle ? "gauge" : (isRainfallOnly ? "cloud-rain" : m.icon);
+    var headerHtml =
+      '<div class="flood-header">' +
+        '<div class="flood-title-group">' +
+          '<i data-lucide="' + headerIcon + '" class="flood-icon" aria-hidden="true"></i>' +
+          '<span class="flood-title">Flood Advisory</span>' +
+        '</div>' +
+        '<span class="flood-chip ' + m.chipCls + '" aria-live="polite">' + esc(m.label) + '</span>' +
+      '</div>';
+
+    // ── Gauge section (Google authoritative) ──
+    var gaugeHtml = "";
     if (isGoogle) {
+      var gaugeMetrics = [];
       if (flood.km != null)
-        metrics.push(["Nearest gauge", Math.round(flood.km) + " km"]);
+        gaugeMetrics.push(floodMetricRow("Nearest gauge", Math.round(flood.km) + " km"));
       if (flood.trend && FLOOD_TREND[flood.trend])
-        metrics.push(["Water trend", FLOOD_TREND[flood.trend]]);
+        gaugeMetrics.push(floodMetricRow("Water trend", floodTrendValue(flood.trend)));
       if (flood.issuedAt)
-        metrics.push(["Issued", esc(fmtStamp(flood.issuedAt))]);
+        gaugeMetrics.push(floodMetricRow("Issued", esc(fmtIssuedTime(flood.issuedAt))));
+      if (gaugeMetrics.length)
+        gaugeHtml =
+          '<div class="flood-section flood-section--gauge">' +
+            '<span class="flood-section-label">Gauge data</span>' +
+            gaugeMetrics.join("") +
+          '</div>';
     }
-    // Rainfall-derived fallback — supporting context only.
+
+    // ── Supporting context section (rainfall/flow) ──
+    var supportMetrics = [];
     if (flood && typeof flood.precip === "number")
-      metrics.push(["Rainfall", (Math.round(flood.precip * 10) / 10) + " mm"]);
+      supportMetrics.push(floodMetricRow("Rainfall", (Math.round(flood.precip * 10) / 10) + " mm"));
     if (flood && typeof flood.discharge === "number")
-      metrics.push(["River flow", Math.round(flood.discharge) + " m³/s"]);
+      supportMetrics.push(floodMetricRow("River flow", Math.round(flood.discharge) + " m³/s"));
     if (flood && flood.dischargeTrend && FLOOD_TREND[flood.dischargeTrend])
-      metrics.push(["Flow trend", FLOOD_TREND[flood.dischargeTrend]]);
-    var metaHtml = metrics.map(function (x) {
-      return '<div class="flood-metric"><span class="flood-metric-k">' + esc(x[0]) + '</span><span class="flood-metric-v">' + esc(x[1]) + '</span></div>';
-    }).join("");
+      supportMetrics.push(floodMetricRow("Flow trend", floodTrendValue(flood.dischargeTrend)));
+    // For rainfall-only fallback, also show precip as the primary metric.
+    if (isRainfallOnly && flood && typeof flood.precip === "number" && !supportMetrics.length)
+      supportMetrics.push(floodMetricRow("Rainfall estimate", (Math.round(flood.precip * 10) / 10) + " mm"));
+    var supportHtml = "";
+    if (supportMetrics.length) {
+      var supportLabel = isGoogle ? "Supporting context" : (isRainfallOnly ? "Estimated from rainfall" : "Supporting context");
+      supportHtml =
+        '<div class="flood-section flood-section--support">' +
+          '<span class="flood-section-label">' + esc(supportLabel) + '</span>' +
+          supportMetrics.join("") +
+        '</div>';
+    }
+
+    // ── Guidance tip ──
+    var tipIcon = lvl === "NONE" ? "droplets" : (lvl === "UNKNOWN" ? "activity" : "alert-triangle");
     var tip = FLOOD_TIP[lvl] || FLOOD_TIP.UNKNOWN;
+    var guidanceHtml =
+      '<div class="flood-guidance" role="note">' +
+        '<i data-lucide="' + tipIcon + '" class="flood-guidance-icon" aria-hidden="true"></i>' +
+        '<p class="flood-tip-text">' + esc(tip) + '</p>' +
+      '</div>';
+
+    // ── Attribution ──
     var srcUrl = (flood && flood.sourceUrl) || "https://open-meteo.com/en/docs/flood-api";
     var srcName = (flood && flood.source) || "Open-Meteo";
-    return '<div class="wx-flood ' + m.cls + '">' +
-      '<div class="flood-head">' +
-        '<span class="flood-title"><i data-lucide="waves"></i>Flood Advisory</span>' +
-        '<span class="flood-badge"><i data-lucide="' + m.icon + '"></i>' + esc(m.label) + '</span>' +
-      '</div>' +
-      (metaHtml ? '<div class="flood-metrics">' + metaHtml + '</div>' : '') +
-      '<p class="flood-tip"><i data-lucide="' + (lvl === "NONE" ? "droplets" : (lvl === "UNKNOWN" ? "activity" : "alert-triangle")) + '"></i>' + esc(tip) + '</p>' +
-      '<p class="flood-src">Source: <a href="' + esc(srcUrl) + '" target="_blank" rel="noopener">' + esc(srcName) + '</a></p>' +
+    var srcIcon = isGoogle ? "gauge" : "cloud-rain";
+    var attributionHtml =
+      '<div class="flood-attribution">' +
+        '<i data-lucide="' + srcIcon + '" class="flood-src-icon" aria-hidden="true"></i>' +
+        '<a class="flood-src-link" href="' + esc(srcUrl) + '" target="_blank" rel="noopener noreferrer">' +
+          esc(srcName) +
+          '<i data-lucide="external-link" aria-hidden="true"></i>' +
+        '</a>' +
+      '</div>';
+
+    // ── Compose ──
+    return '<div class="wx-flood ' + m.cls + '" role="region" aria-label="Flood advisory">' +
+      headerHtml +
+      gaugeHtml +
+      supportHtml +
+      guidanceHtml +
+      attributionHtml +
     '</div>';
   }
 

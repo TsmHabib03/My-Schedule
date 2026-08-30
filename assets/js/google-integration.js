@@ -34,6 +34,15 @@
     email: { label: "Email", icon: "mail", action: "Open Gmail" }
   };
 
+  /* Google Classroom icon — green chalkboard with two people */
+  const CLASSROOM_ICON = `<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="#0F9D58"/><path d="M7.5 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="#fff"/><path d="M3 17.5c0-1.93 2.01-3.5 4.5-3.5s4.5 1.57 4.5 3.5V18H3v-.5Z" fill="#fff"/><path d="M16.5 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="#fff"/><path d="M12 17.5c0-1.93 2.01-3.5 4.5-3.5s4.5 1.57 4.5 3.5V18H12v-.5Z" fill="#fff"/></svg>`;
+
+  /* Gmail icon — red M envelope */
+  const GMAIL_ICON = `<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" stroke="#EA4335" stroke-width="1.5" fill="none"/><path d="M2 6l10 7 10-7" stroke="#EA4335" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 6v12" stroke="#4285F4" stroke-width="1.5" stroke-linecap="round"/><path d="M22 6v12" stroke="#34A853" stroke-width="1.5" stroke-linecap="round"/><path d="M2 18h4" stroke="#FBBC05" stroke-width="1.5" stroke-linecap="round"/><path d="M18 18h4" stroke="#34A853" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+
+  /* Google G logo */
+  const GOOGLE_LOGO = `<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>`;
+
   function esc(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -137,7 +146,7 @@
     ui.account.innerHTML = `
       <article class="google-account-card is-disconnected">
         <header class="google-card-band">
-          <div class="google-band-mark"><i data-lucide="graduation-cap"></i></div>
+          <div class="google-band-mark">${CLASSROOM_ICON}</div>
           <div class="google-band-copy">
             <span>Google Classroom</span>
             <strong>Classroom &amp; Email Updates</strong>
@@ -180,9 +189,12 @@
     iconify();
   }
 
-  function toggleRow(key, title, copy, checked, disabled) {
+  function toggleRow(key, title, copy, checked, disabled, icon) {
+    const isHtml = icon && icon.startsWith("<");
+    const iconContent = isHtml ? icon : `<i data-lucide="${esc(icon || "settings")}" aria-hidden="true"></i>`;
     return `
       <label class="google-control-row">
+        <span class="google-control-icon" aria-hidden="true">${iconContent}</span>
         <span class="google-control-copy"><strong>${esc(title)}</strong><small>${esc(copy)}</small></span>
         <span class="google-switch-wrap">
           <span class="google-switch-state">${checked ? "ON" : "OFF"}</span>
@@ -196,10 +208,11 @@
     const prefs = account.preferences || { classroom: true, gmail: false, autoRefresh: true };
     const permissions = account.permissions || { gmail: false };
     setStatus("Connected", "connected");
+    const syncTime = cache.checkedAt ? esc(formatDate(cache.checkedAt)) : "Not synchronized yet";
     ui.account.innerHTML = `
       <article class="google-account-card is-connected">
         <header class="google-card-band">
-          <div class="google-band-mark"><i data-lucide="graduation-cap"></i></div>
+          <div class="google-band-mark">${CLASSROOM_ICON}</div>
           <div class="google-band-copy">
             <span>Google Classroom</span>
             <strong>Authorized Account</strong>
@@ -208,22 +221,26 @@
         </header>
         <div class="google-card-body">
           <div class="google-account-identity">
-            <div class="google-card-seal is-connected"><i data-lucide="check"></i></div>
+            <div class="google-card-seal is-connected">${GOOGLE_LOGO.replace('class="brand-icon"', 'class="brand-icon brand-icon--seal"')}</div>
             <div>
               <p class="google-card-eyebrow">Google Account</p>
               <h3>${esc(account.email || "Google account")}</h3>
-              <p>Authorization is active. Tokens remain encrypted and unavailable to frontend JavaScript.</p>
+              <p class="google-card-status"><i data-lucide="check-circle" aria-hidden="true"></i>Authorization active · Tokens encrypted</p>
             </div>
           </div>
           <div class="google-controls">
-            ${toggleRow("classroom", "Classroom Updates", "Announcements, materials, and assignments", prefs.classroom !== false, false)}
-            ${toggleRow("gmail", "Gmail Notifications", permissions.gmail ? "Relevant message metadata only" : "Requires separate Google authorization", prefs.gmail === true, false)}
-            ${toggleRow("autoRefresh", "Auto Refresh", "Checks at most every 15 minutes while active", prefs.autoRefresh !== false, false)}
+            <div class="google-controls-header">
+              <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+              <span>Preferences</span>
+            </div>
+            ${toggleRow("classroom", "Classroom Updates", "Announcements, materials, and assignments", prefs.classroom !== false, false, CLASSROOM_ICON)}
+            ${toggleRow("gmail", "Gmail Notifications", permissions.gmail ? "Relevant message metadata only" : "Requires separate Google authorization", prefs.gmail === true, false, GMAIL_ICON)}
+            ${toggleRow("autoRefresh", "Auto Refresh", "Checks at most every 15 minutes while active", prefs.autoRefresh !== false, false, "refresh-cw")}
           </div>
           <div class="google-sync-row">
             <div>
-              <span>Last synchronized</span>
-              <strong>${cache.checkedAt ? esc(formatDate(cache.checkedAt)) : "Not synchronized yet"}</strong>
+              <span><i data-lucide="clock-3" aria-hidden="true"></i>Last synchronized</span>
+              <strong>${syncTime}</strong>
             </div>
             <button class="google-icon-button" type="button" data-google-action="refresh" title="Refresh Google updates" aria-label="Refresh Google updates" ${syncing ? "disabled" : ""}>
               <i data-lucide="refresh-cw"${syncing ? " class=\"is-spinning\"" : ""}></i>
@@ -236,7 +253,7 @@
             </div>` : ""}
           <div class="google-account-actions">
             <button class="google-secondary-button" type="button" data-google-action="refresh" ${syncing ? "disabled" : ""}><i data-lucide="refresh-cw"></i>${syncing ? "Refreshing" : "Refresh Now"}</button>
-            <button class="google-danger-button" type="button" data-google-action="disconnect"><i data-lucide="unlink"></i>Disconnect Google Account</button>
+            <button class="google-danger-button" type="button" data-google-action="disconnect"><i data-lucide="unlink"></i>Disconnect Account</button>
           </div>
         </div>
       </article>`;
@@ -248,28 +265,40 @@
 
   function updateCard(item) {
     const meta = TYPE_META[item.type] || TYPE_META.announcement;
-    const due = item.dueAt ? `<span><i data-lucide="calendar-clock"></i>Due ${esc(formatDate(item.dueAt))}</span>` : "";
-    const detail = item.materialType ? `<span><i data-lucide="paperclip"></i>${esc(item.materialType)}</span>` : "";
-    const author = item.author ? `<p class="google-update-author">From ${esc(item.author)}</p>` : "";
+    const source = item.source === "gmail" ? "Gmail" : "Classroom";
+    const posted = item.postedAt || item.createdAt;
+    const due = item.dueAt;
+    const detail = item.materialType ? esc(item.materialType) : "";
+    const author = item.author ? esc(item.author) : "";
+    const desc = item.description && item.description !== item.title ? item.description : "";
+    const brandIcon = item.source === "gmail" ? GMAIL_ICON : CLASSROOM_ICON;
     return `
       <article class="google-update-card type-${esc(item.type)}${item.isNew ? " is-new" : ""}" data-update-id="${esc(item.id)}">
-        <header class="google-update-band">
-          <div class="google-update-label"><i data-lucide="${meta.icon}"></i><span>${esc(meta.label)}</span></div>
-          ${item.isNew ? `<span class="google-new-badge">New</span>` : `<span class="google-source-code">${item.source === "gmail" ? "GMAIL" : "CLASSROOM"}</span>`}
-        </header>
-        <div class="google-update-body">
-          <div class="google-update-tags"><span class="google-update-type-chip type-${esc(item.type)}"><i data-lucide="${meta.icon}"></i>${esc(meta.label)}</span>${item.isNew ? '<span class="google-update-new-chip"><i data-lucide="sparkles"></i>New</span>' : ''}</div>
-          <p class="google-update-course">${esc(item.courseName || "Google Classroom")}</p>
-          <h3>${esc(item.title || "Classroom update")}</h3>
-          ${item.description && item.description !== item.title ? `<p class="google-update-description">${esc(item.description)}</p>` : ""}
-          ${author}
+        <div class="google-update-card-head">
+          <span class="google-update-source-tag">
+            ${brandIcon}
+            ${esc(source)}
+          </span>
+          <span class="google-update-type-tag">
+            <i data-lucide="${meta.icon}" aria-hidden="true"></i>
+            ${esc(meta.label)}
+          </span>
+          ${item.isNew ? `<span class="google-update-new-dot" aria-label="New"></span>` : ""}
+        </div>
+        <p class="google-update-course">${esc(item.courseName || "Google Classroom")}</p>
+        <h3 class="google-update-title">${esc(item.title || "Classroom update")}</h3>
+        ${desc ? `<p class="google-update-description">${esc(desc)}</p>` : ""}
+        ${author ? `<p class="google-update-author">By ${esc(author)}</p>` : ""}
+        <div class="google-update-footer">
           <div class="google-update-meta">
-            <span><i data-lucide="clock-3"></i>${esc(formatDate(item.postedAt || item.createdAt))}</span>
-            ${detail}
-            ${due}
+            ${posted ? `<span class="google-update-meta-item"><i data-lucide="clock-3" aria-hidden="true"></i>${esc(formatDate(posted))}</span>` : ""}
+            ${due ? `<span class="google-update-meta-item google-update-meta-item--due"><i data-lucide="calendar-clock" aria-hidden="true"></i>Due ${esc(formatDate(due))}</span>` : ""}
+            ${detail ? `<span class="google-update-meta-item"><i data-lucide="paperclip" aria-hidden="true"></i>${detail}</span>` : ""}
           </div>
-          <a class="google-update-action" href="${esc(item.url || "https://classroom.google.com")}" target="_blank" rel="noopener noreferrer" data-google-open-update="${esc(item.id)}">
-            ${esc(meta.action)}<i data-lucide="external-link"></i>
+          <a class="google-update-action-link" href="${esc(item.url || "https://classroom.google.com")}" target="_blank" rel="noopener noreferrer" data-google-open-update="${esc(item.id)}">
+            ${brandIcon}
+            <span>${esc(meta.action)}</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
           </a>
         </div>
       </article>`;
@@ -546,7 +575,7 @@
   }
 
   function bindEvents() {
-    document.getElementById("google-integration").addEventListener("click", event => {
+    function handleClick(event) {
       const action = event.target.closest("[data-google-action]");
       if (action && action.dataset.googleAction === "refresh") syncUpdates(true);
       if (action && action.dataset.googleAction === "disconnect") disconnect();
@@ -557,15 +586,19 @@
       if (viewButton) setUpdateView(viewButton.dataset.googleView);
       const update = event.target.closest("[data-google-open-update]");
       if (update) markRead(update.dataset.googleOpenUpdate);
-    });
-    document.getElementById("google-integration").addEventListener("change", event => {
+    }
+    function handleChange(event) {
       const input = event.target.closest("[data-google-pref]");
       if (input) savePreference(input);
       if (event.target.closest("#google-update-subject, #google-update-type, #google-update-new")) renderUpdates();
-    });
+    }
+    document.getElementById("google-integration")?.addEventListener("click", handleClick);
+    document.getElementById("google-updates-section")?.addEventListener("click", handleClick);
+    document.getElementById("google-integration")?.addEventListener("change", handleChange);
+    document.getElementById("google-updates-section")?.addEventListener("change", handleChange);
     document.getElementById("google-update-search")?.addEventListener("input", renderUpdates);
     window.addEventListener("online", () => { showFeedback("", "info"); loadStatus(); });
-    window.addEventListener("offline", () => { showFeedback("Offline - showing last synced updates.", "info"); renderUpdates(); });
+    window.addEventListener("offline", () => { showFeedback("Offline - showing last synced updates.", "error"); renderUpdates(); });
   }
 
   function init() {
