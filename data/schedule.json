@@ -1,6 +1,18 @@
 [
   {
     "day": "Monday",
+    "start": "09:00",
+    "end": "11:00",
+    "subject": "Physical Fitness and Wellness",
+    "course": "PE 1",
+    "building": "Belmonte Hall",
+    "code": "SB",
+    "room": "SB OG",
+    "floor": "Ground Floor",
+    "units": 2
+  },
+  {
+    "day": "Monday",
     "start": "11:00",
     "end": "14:00",
     "subject": "Mathematics in the Modern World",
@@ -110,18 +122,6 @@
     "room": "IL502A",
     "floor": "5th Floor",
     "units": 3
-  },
-  {
-    "day": "Friday",
-    "start": "11:30",
-    "end": "13:30",
-    "subject": "Physical Fitness and Wellness",
-    "course": "PE 1",
-    "building": "Belmonte Hall",
-    "code": "SB",
-    "room": "SB OG",
-    "floor": "Ground Floor",
-    "units": 2
   }
 ]
 

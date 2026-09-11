@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feed preview harness</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<style>body{padding:0}</style>
+</head>
+<body data-page="google">
+<div class="app-shell">
+<main class="page-container section-stack settings-page google-page">
+
+  <section id="google-updates-section" class="portal-card">
+    <div class="google-updates-heading">
+      <div>
+        <p class="workspace-kicker">Activity Feed</p>
+        <h2 class="page-title">Recent Classroom Updates</h2>
+        <p class="caption" style="margin-top:4px;">Scan announcements, assignments, and new materials without digging through the full feed.</p>
+      </div>
+      <div class="google-updates-summary"><span id="google-update-count" class="google-update-count">12 updates, 3 new</span><div class="google-feed-view-toggle" role="tablist" aria-label="Update view"><button type="button" class="is-active" data-google-view="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z"/></svg>New</button><button type="button" data-google-view="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M2 14l10 5 10-5"/></svg>All</button></div></div>
+    </div>
+
+    <div class="google-update-filters" role="search" aria-label="Filter Classroom updates">
+      <label class="google-filter-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="google-update-search" type="search" placeholder="Search updates" autocomplete="off"></label>
+      <select id="google-update-subject"><option value="all">All Subjects</option></select>
+      <select id="google-update-type"><option value="all">All Types</option></select>
+      <label class="google-filter-new"><input id="google-update-new" type="checkbox"><span>New only</span></label>
+      <button class="google-filter-reset" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+    </div>
+    <div id="google-updates-list" class="google-updates-list"></div>
+  </section>
+
+</main>
+</div>
+<script>
+const CLASSROOM_ICON = `<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" fill="#0F9D58"/><path d="M7.5 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="#fff"/><path d="M3 17.5c0-1.93 2.01-3.5 4.5-3.5s4.5 1.57 4.5 3.5V18H3v-.5Z" fill="#fff"/><path d="M16.5 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="#fff"/><path d="M12 17.5c0-1.93 2.01-3.5 4.5-3.5s4.5 1.57 4.5 3.5V18H12v-.5Z" fill="#fff"/></svg>`;
+const GMAIL_ICON = `<svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" stroke="#EA4335" stroke-width="1.5" fill="none"/><path d="M2 6l10 7 10-7" stroke="#EA4335" stroke-width="1.5"/><path d="M2 6v12" stroke="#4285F4" stroke-width="1.5"/><path d="M22 6v12" stroke="#34A853" stroke-width="1.5"/></svg>`;
+const ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+const ARROW = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`;
+
+const items = [
+  {type:"assignment",source:"classroom",isNew:true,course:"Information Assurance and Security 2",title:"Midterm Laboratory Exercise 4 — Implementing Role Based Access Control",desc:"Submit your configuration screenshots and a short write-up describing each role you created and the permissions assigned to it.",author:"Prof. Maria Dela Cruz",posted:"Aug 30, 3:42 PM",due:"Sep 2, 11:59 PM",detail:"3 attachments",label:"Assignment",action:"View Assignment"},
+  {type:"announcement",source:"classroom",isNew:true,course:"Application Development and Emerging Technologies",title:"No synchronous class tomorrow",desc:"Please continue working on your capstone documentation.",author:"Prof. Ramon Santos",posted:"Aug 30, 9:10 AM",label:"Announcement",action:"Open Classroom"},
+  {type:"material",source:"classroom",isNew:false,course:"Systems Integration and Architecture",title:"Week 3 Lecture Slides",desc:"Covers service oriented architecture and enterprise integration patterns discussed in class.",author:"Prof. Angela Reyes",posted:"Aug 28, 1:05 PM",detail:"PDF",label:"New Material",action:"View in Classroom"},
+  {type:"email",source:"gmail",isNew:false,course:"Google Classroom",title:"Reminder: Enrollment verification deadline",posted:"Aug 27, 8:00 AM",label:"Email",action:"Open Gmail"}
+];
+
+document.getElementById("google-updates-list").innerHTML = items.map(item => {
+  const brand = item.source === "gmail" ? GMAIL_ICON : CLASSROOM_ICON;
+  return `
+  <article class="google-update-card type-${item.type}${item.isNew?" is-new":""}">
+    <div class="google-update-card-head">
+      <span class="google-update-source-tag">${brand}${item.source==="gmail"?"Gmail":"Classroom"}</span>
+      <span class="google-update-type-tag">${ICON}${item.label}</span>
+      ${item.isNew?`<span class="google-update-new-dot"></span>`:""}
+    </div>
+    <p class="google-update-course">${item.course}</p>
+    <h3 class="google-update-title">${item.title}</h3>
+    ${item.desc?`<p class="google-update-description">${item.desc}</p>`:""}
+    ${item.author?`<p class="google-update-author">By ${item.author}</p>`:""}
+    <div class="google-update-footer">
+      <div class="google-update-meta">
+        <span class="google-update-meta-item">${ICON}${item.posted}</span>
+        ${item.due?`<span class="google-update-meta-item google-update-meta-item--due">${ICON}Due ${item.due}</span>`:""}
+        ${item.detail?`<span class="google-update-meta-item">${ICON}${item.detail}</span>`:""}
+      </div>
+      <a class="google-update-action-link" href="#">${brand}<span>${item.action}</span>${ARROW}</a>
+    </div>
+  </article>`;
+}).join("");
+</script>
+
+<pre id="diag" style="font:11px monospace;white-space:pre-wrap;padding:8px;background:#111;color:#0f0"></pre>
+<script>
+(function(){
+  const d=document, L=[];
+  const vw=d.documentElement.clientWidth;
+  L.push('innerWidth='+innerWidth+' clientWidth='+vw+' scrollWidth='+d.documentElement.scrollWidth);
+  L.push('mq400='+matchMedia('(max-width:400px)').matches+' mq560='+matchMedia('(max-width:560px)').matches+' mq720='+matchMedia('(max-width:720px)').matches);
+  const f=d.querySelector('.google-update-filters');
+  L.push('filters cols='+getComputedStyle(f).gridTemplateColumns+' w='+Math.round(f.getBoundingClientRect().width));
+  const li=d.querySelector('.google-updates-list');
+  L.push('list cols='+getComputedStyle(li).gridTemplateColumns+' w='+Math.round(li.getBoundingClientRect().width));
+  const h=d.querySelector('.google-updates-heading');
+  L.push('heading display='+getComputedStyle(h).display+' w='+Math.round(h.getBoundingClientRect().width));
+  const bad=[];
+  d.querySelectorAll('*').forEach(el=>{
+    const r=el.getBoundingClientRect();
+    if(r.right>vw+1||r.width>vw+1) bad.push(el.tagName+'.'+(el.className||'')+' w='+Math.round(r.width)+' right='+Math.round(r.right));
+  });
+  L.push('OVERFLOW count='+bad.length);
+  L.push(...bad.slice(0,30));
+  d.getElementById('diag').textContent=L.join('
+');
+})();
+</script>
+</body>
+</html>
